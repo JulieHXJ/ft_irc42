@@ -6,7 +6,7 @@
 /*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:01:40 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/13 21:10:18 by junjun           ###   ########.fr       */
+/*   Updated: 2025/09/13 23:50:04 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,11 +26,14 @@ private:
 	int listenfd; //listening socket
 	// int connfd; //connection socket for a client
 	std::vector<struct pollfd> pollfds; //for poll()
-	std::map<int, std::string> clientBuffer; //map fd to client data buffer
+	std::map<int, std::string> clientBuf; //map fd to client data buffer
+	std::map<int, std::string> sendbuf; //map fd to sent data buffer
 
 	//helper functions
 	static void addPollFd(std::vector<pollfd>& pfds, int fd, short events);
 	static void removePollFd(std::vector<pollfd>& pfds, size_t index);
+
+	bool getLine(std::string& buf, std::string& line);
 	
 public:
 	Server(): listenfd(-1){}

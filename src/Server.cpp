@@ -6,7 +6,7 @@
 /*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/13 22:38:26 by junjun           ###   ########.fr       */
+/*   Updated: 2025/09/13 23:59:24 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,7 +19,7 @@ void Server::closeFds(){
 		close(pollfds[i].fd);
 	}
 	pollfds.clear();
-	clientBuffer.clear();
+	clientBuf.clear();
 }
 
 void Server::setNonBlocking(int fd){
@@ -92,6 +92,17 @@ void Server::serverInit(int port){
 	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting 1 client)\n";
 }
 
+//extract a line from buf, return true if a line is found
+bool Server::getLine(std::string& clientBuf, std::string& line) {
+    std::string::size_type pos = clientBuf.find('\n');
+    if (pos == std::string::npos) return false;
+    line = clientBuf.substr(0, pos);
+    // remove '\r' if present
+    if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
+    clientBuf.erase(0, pos + 1); // remove this line + '\n'
+    return true;
+}
+
 //to be continued...
 void Server::run(){
 
@@ -100,9 +111,42 @@ void Server::run(){
     for (;;) { ::pause(); }
 
 	
-	// while (true)
-	// {
-	// 	/* code */
-	// }
+	while (true)
+	{
+		int n = ::poll(&pollfds[0], pollfds.size(), -1);
+		if (n < 0) {
+			if (errno == EINTR)
+			{
+				continue; // interrupted by signal, retry
+			}
+			perror("poll");
+			break;
+		}
+	
+		//1. accept new connections
+
+		
+
+		//2. handle readable fds
+		//extract line from clientBuf, process it, append response to sentbuf
+		
+
+
+		//3. handle writable from sendbuf
+	}
 	
 }
+
+/**
+ * poll()：等待任意 fd 有事件（读/写/错误）
+
+监听 fd 可读 → accept() 直到 EAGAIN
+
+遍历客户端 fd：
+
+POLLIN → recv() 循环读入 inbuf（直到 EAGAIN）→ 按 \n 切出完整行（去尾部 \r）→ 解析命令 → 产出响应（写入 outbuf）→ 若 outbuf 非空，打开 POLLOUT
+
+POLLOUT → 从 outbuf 尽量 send()（直到 EAGAIN）→ 发送完则关闭 POLLOUT
+
+POLLHUP/POLLERR 或 recv()==0 → 清理客户端（离开所有频道、关闭 fd、移除数据结构）
+ */
