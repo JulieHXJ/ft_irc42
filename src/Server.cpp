@@ -3,16 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/13 23:59:24 by junjun           ###   ########.fr       */
+/*   Updated: 2025/09/14 18:15:33 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "Server.hpp"
+#include "../inc/Server.hpp"
 #include <fcntl.h>
 #include <unistd.h> // close
+#include <arpa/inet.h> // inet_ntop
 
 void Server::closeFds(){
 	for (size_t i = 0; i < pollfds.size(); ++i) {
@@ -84,10 +85,8 @@ void Server::serverInit(int port){
 	
 	//Build the pollfd list with the listening socket (and maybe the self-pipe read end). 
 	setNonBlocking(listenfd); 
-	
-	//构建 poll 列表：索引 0 放监听 fd，只关心 POLLIN（有新连接）
 	pollfds.clear();
-    addPollFd(pollfds, listenfd, POLLIN); // 索引 0：监听 fd
+    addPollFd(pollfds, listenfd, POLLIN);
 
 	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting 1 client)\n";
 }
@@ -103,50 +102,49 @@ bool Server::getLine(std::string& clientBuf, std::string& line) {
     return true;
 }
 
-//to be continued...
 void Server::run(){
-
+	//placeholder to keep the server running
 	std::cout << "[run] placeholder: serverInit done. (run() not implemented yet)\n";
     std::cout << "Press Ctrl+C to exit.\n";
     for (;;) { ::pause(); }
 
+	// //real server loop with non-blocking + poll (multi-client echo, line-based)
+	// while (true)
+	// {
+	// 	//poll()：等待任意 fd 有事件（读/写/错误）
+	// 	int n = ::poll(&pollfds[0], pollfds.size(), -1);
+	// 	if (n < 0) {
+	// 		if (errno == EINTR)
+	// 		{
+	// 			continue; // interrupted by signal, retry
+	// 		}
+	// 		perror("poll");
+	// 		break;
+	// 	}
 	
-	while (true)
-	{
-		int n = ::poll(&pollfds[0], pollfds.size(), -1);
-		if (n < 0) {
-			if (errno == EINTR)
-			{
-				continue; // interrupted by signal, retry
-			}
-			perror("poll");
-			break;
-		}
-	
-		//1. accept new connections
+	// 	//1. accept new connections 监听 fd 可读 → accept() 直到 EAGAIN
 
+	// 	//2. 遍历客户端 fd：
+	// 	for (size_t i = 0; i < count; i++)
+	// 	{
+
+	// 		//2.1 handle readable fds
+	// 		// POLLIN → recv() 循环读入 inbuf（直到 EAGAIN）→ 按 \n 切出完整行（去尾部 \r）→ 解析命令 → 产出响应（写入 outbuf）→ 若 outbuf 非空，打开 POLLOUT
+	// 		//extract line from clientBuf, process it, append response to sentbuf
+
+
+			
+	// 		//2.2 handle writable from sendbuf
+	// 		// POLLOUT → 从 outbuf 尽量 send()（直到 EAGAIN）→ 发送完则关闭 POLLOUT
+
+			
+			
+	// 		//2.3 POLLHUP/POLLERR 或 recv()==0 → 清理客户端（离开所有频道、关闭 fd、移除数据结构）
 		
 
-		//2. handle readable fds
-		//extract line from clientBuf, process it, append response to sentbuf
-		
 
-
-		//3. handle writable from sendbuf
-	}
+	// 	}
+	
+	// }
 	
 }
-
-/**
- * poll()：等待任意 fd 有事件（读/写/错误）
-
-监听 fd 可读 → accept() 直到 EAGAIN
-
-遍历客户端 fd：
-
-POLLIN → recv() 循环读入 inbuf（直到 EAGAIN）→ 按 \n 切出完整行（去尾部 \r）→ 解析命令 → 产出响应（写入 outbuf）→ 若 outbuf 非空，打开 POLLOUT
-
-POLLOUT → 从 outbuf 尽量 send()（直到 EAGAIN）→ 发送完则关闭 POLLOUT
-
-POLLHUP/POLLERR 或 recv()==0 → 清理客户端（离开所有频道、关闭 fd、移除数据结构）
- */
