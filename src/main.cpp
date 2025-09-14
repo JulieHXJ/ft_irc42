@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/08 15:49:16 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/14 18:16:07 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/09/14 18:20:22 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,10 @@
 #include <csignal> // signal, SIGPIPE, SIG_IGN
 #include <cstdlib> // std::atoi
 
+/**
+ * Main entry point for the IRC server.
+ * Usage: ./ircserv [port]
+ * Default port is 6667 if not specified.*/
 int main(int argc, char** argv) {
 	Server server;
     int port = (argc >= 2) ? std::atoi(argv[1]) : 6667; // default 6667
@@ -24,13 +28,16 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
     server.serverInit(port);
 	server.run();//incomplete yet
-	
 	return 0;
 }
 
 
 
-// Simple echo server.
+/**
+ * Simple echo server.
+ * Usage: ./ircserv
+ * in another terminal nc 127.0.0.1 6667
+ */
 // #include <iostream>
 // #include <cstring>
 // #include <cstdlib>
