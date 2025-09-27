@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+         #
+#    By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/09/08 15:42:03 by junjun            #+#    #+#              #
-#    Updated: 2025/09/14 18:02:07 by xhuang           ###   ########.fr        #
+#    Updated: 2025/09/27 09:31:05 by mmonika          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -14,7 +14,7 @@ NAME        = ircserv
 
 CXX         = c++
 
-CXXFLAGS    = -Wall -Wextra -Werror -std=c++98
+CXXFLAGS    = -Wall -Wextra -Werror -std=c++17
 
 SRCS		= src/main.cpp src/Server.cpp
 
