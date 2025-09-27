@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/27 00:52:18 by junjun           ###   ########.fr       */
+/*   Updated: 2025/09/27 18:02:08 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,23 +14,37 @@
 #include <fcntl.h>
 #include <unistd.h> // close
 #include <arpa/inet.h> // inet_ntop
+#include <cerrno>
+#include <cstring>
+#include <stdexcept>
 
-void Server::closeFds(){
-	for (size_t i = 0; i < pollfds.size(); ++i) {
-		close(pollfds[i].fd);
-	}
-	pollfds.clear();
-	inbuff.clear();
+#include <csignal>
+extern volatile sig_atomic_t g_stop;// define in main (“There is a variable called g_stop, it’s declared elsewhere, it can change suddenly (signal), and I want to use it here.”)
+
+namespace {
+	
+	const size_t MAX_OUTBUF = 256 * 1024; // 256 KB per client
+	void logErr(const char* str){ perror(str); }
+	
+	void logNew(int fd, const sockaddr_in& clientAddr){ 
+		char ipStr[INET_ADDRSTRLEN];
+		::inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, sizeof(ipStr));
+		std::cout << "[+] New connection from " << ipStr << ":" 
+					<< ntohs(clientAddr.sin_port) << ", fd=" << fd << "\n";}
+	
+	void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
 }
 
+
+//helpers
 void Server::setNonBlocking(int fd){
-	int flags = fcntl(fd, F_GETFL, 0);
+	int flags = ::fcntl(fd, F_GETFL, 0);
 	if (flags == -1) {
-		// perror("fcntl F_GETFL");
-		// return;
-		flags = 0;//allow it to proceed, even if error
-	}
-	::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        throw std::runtime_error(std::string("fcntl(F_GETFL): ") + std::strerror(errno));
+    }
+    if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        throw std::runtime_error(std::string("fcntl(F_SETFL,O_NONBLOCK): ") + std::strerror(errno));
+    }
 }
 
 /**
@@ -49,8 +63,8 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
  * @note swap with the last one and pop_back
  */
 void Server::removePollFd(std::vector<pollfd>& pfds, size_t index) {
-    pfds[index] = pfds.back();
-    pfds.pop_back();
+	pfds[index] = pfds.back();
+	pfds.pop_back();
 }
 
 /**
@@ -72,94 +86,231 @@ bool Server::getLine(std::string& inbuff, std::string& line) {
 	return true;
 }
 
+//server functions
+void Server::closeFds(){
+	for (size_t i = 0; i < pollfds.size(); ++i) {
+		close(pollfds[i].fd);
+	}
+	pollfds.clear();
+	inbuff.clear();
+	outbuff.clear();
+}
+
+
 void Server::serverInit(int port){ 
-	//Create the listening socket. ipv4, tcp
+	//1) Create socket. ipv4, tcp
 	listenfd = ::socket(AF_INET, SOCK_STREAM, 0); 
 	if (listenfd < 0) { 
-		perror("socket"); 
-		std::exit(1);
+		throw std::runtime_error(std::string("socket: ") + std::strerror(errno));
 	} 
 	
-	//allow socket descriptor to be reusable
+	//2) allow socket descriptor to be reusable
 	//setsockopt() is used to set options for the socket referred to by the file descriptor sockfd.
 	//Here, it sets the SO_REUSEADDR option, which allows the socket to bind to an address that is already in use.
 	//This is useful for server applications that need to restart and bind to the same port without waiting for the OS to release it.
-	int yes = 1; 
-	::setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)); 
-#ifdef SO_REUSEPORT 
-	::setsockopt(listenfd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)); 
-#endif 
+	int yes = 1;
+    if (::setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
+        ::close(listenfd);
+        throw std::runtime_error(std::string("setsockopt(SO_REUSEADDR): ") + std::strerror(errno));
+    }
+#ifdef SO_REUSEPORT
+    if (::setsockopt(listenfd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) < 0) {
+        ::close(listenfd);
+        throw std::runtime_error(std::string("setsockopt(SO_REUSEPORT): ") + std::strerror(errno));
+    }
+#endif
 	
-	//fill addr structure 
+	//3) bind
 	sockaddr_in addr; 
 	std::memset(&addr, 0, sizeof(addr)); 
 	addr.sin_family = AF_INET; 
 	addr.sin_addr.s_addr = htonl(INADDR_ANY); // bind to all local IPv4 interfaces 
 	addr.sin_port = htons(port); //bind the socket to IP and port 
-	if (::bind(listenfd, (sockaddr*)&addr, sizeof(addr)) < 0) { 
-		perror("bind"); 
-		std::exit(1);
-	} 
+	if (::bind(listenfd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        ::close(listenfd);
+        throw std::runtime_error(std::string("bind: ") + std::strerror(errno));
+    }
 	
-	//change socket into listening mode, max 8 pending connections 
-	if (::listen(listenfd, 8) < 0) { 
-		perror("listen"); 
-		std::exit(1);
-	} 
-	
-	//Build the pollfd list with the listening socket (and maybe the self-pipe read end). 
-	setNonBlocking(listenfd); 
+	// 4) listen
+    if (::listen(listenfd, 64) < 0) {
+        ::close(listenfd);
+        throw std::runtime_error(std::string("listen: ") + std::strerror(errno));
+    }
+	// 5) non-block + poll vector
+	setNonBlocking(listenfd);
 	pollfds.clear();
-    addPollFd(pollfds, listenfd, POLLIN);
+	addPollFd(pollfds, listenfd, POLLIN);
 
-	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting 1 client)\n";
+	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting clients)\n";
+}
+
+//main loop
+
+/**
+ * @brief Accept new incoming connections on the listening socket. 
+ * Print welcone message and the client info.
+ */
+void Server::acceptNew(){
+    if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;//no new connection
+
+    for(;;){
+        sockaddr_in clientAddr; socklen_t clientLen = sizeof(clientAddr);
+        int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
+        if (connfd < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            if (errno == EINTR) continue;
+            logErr("accept"); break;
+        }
+
+        setNonBlocking(connfd);
+        addPollFd(pollfds, connfd, POLLIN);
+
+
+		//build a client object here and store it
+		// Client c;
+		// c.fd = connfd;
+
+        // initialize buffer for this client
+        inbuff[connfd].clear();
+        outbuff[connfd] += ":Server NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹\r\n";
+        // enable write for the newly added (it's at the back)
+        pollfds.back().events |= POLLOUT;
+
+        logNew(connfd, clientAddr);
+    }
+}
+
+/**
+ * @brief Close the socket, erase buffers, and remove from pollfds.
+ */
+void Server::cleanupIndex(size_t i){
+    int fd = pollfds[i].fd;
+    logClose(fd);
+    ::close(fd);
+    inbuff.erase(fd);
+    outbuff.erase(fd);
+    // TODO: remove from channels, nick maps when you add them
+    removePollFd(pollfds, i); //pop back swap
+}
+
+/**
+ * @brief keep receiving and appending until EAGAIN,
+ * then extract lines, process command, generate responses
+ */
+bool Server::handleReadable(size_t i){
+	if (i >= pollfds.size()) return false; //safety check
+	int fd = pollfds[i].fd;
+    char buf[4096];
+	// 1) read in buffer
+	for(;;){
+        ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
+        if (r > 0) {
+            inbuff[fd].append(buf, static_cast<size_t>(r));
+        } else if (r == 0) {
+			//client closed connection
+            cleanupIndex(i);
+            return true; // inde was swap-removed; caller must not ++i
+        } else {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            logErr("recv");
+            cleanupIndex(i);
+            return true;
+        }
+    }
+	
+	// 2) parse complete lines & act
+	std::string line;
+	while (getLine(inbuff[fd], line)) {
+		// trim spaces
+		while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
+		// handleCmd(fd, line); // todo
+        if (line == "QUIT") {
+            ::shutdown(fd, SHUT_RDWR); // next poll/recv sees close
+            continue;
+        }
+        if (line == "WHO") {
+            std::string reply = "USERS:";
+            for (size_t k = 1; k < pollfds.size(); ++k)
+                reply += " fd=" + std::to_string(pollfds[k].fd);
+            outbuff[fd] += reply + "\r\n";
+            // ensure POLLOUT on this fd
+            pollfds[i].events |= POLLOUT;
+            continue;
+        }
+
+        // broadcast to all other clients
+        for (size_t j = 1; j < pollfds.size(); ++j) {
+            int other = pollfds[j].fd;
+            if (other == fd) continue;
+            if (outbuff[other].size() + line.size() + 2 <= MAX_OUTBUF) {
+                outbuff[other] += line;
+                outbuff[other] += "\r\n";
+                pollfds[j].events |= POLLOUT;
+            }
+        }
+	}
+	
+    // If output is nnot empty (from WHO/welcome), keep POLLOUT on
+    if (!outbuff[fd].empty()) {
+        pollfds[i].events |= POLLOUT;
+	}
+	return false; // not removed
+}
+
+bool Server::handleWritable(size_t i){
+	if (i >= pollfds.size()) return false; //safety check
+	int fd = pollfds[i].fd;
+
+	std::string &ob = outbuff[fd];
+	while (!ob.empty()){
+		ssize_t w = ::send(fd, ob.data(), ob.size(), 0);
+		if (w > 0) {
+			ob.erase(0, static_cast<size_t>(w));// remove sent data
+		} else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			return false; // cannot send more now (对方 TCP 接收窗口满了、内核发送缓冲不够等)
+		} else {
+			logErr("send");
+			cleanupIndex(i);
+			return true;//index is removed
+		}
+	}
+	pollfds[i].events = POLLIN;//all sent
+	return false;
 }
 
 void Server::run(){
-	// placeholder to keep the server running
-	// std::cout << "[run] placeholder: serverInit done. (run() not implemented yet)\n";
-    // std::cout << "Press Ctrl+C to exit.\n";
-    // for (;;) { ::pause(); }
-
-	//real server loop with non-blocking + poll (multi-client, line-based)
 	while (true)
 	{
-		int n = ::poll(&pollfds[0], pollfds.size(), -1);
+		if (g_stop) break; // exit loop
+		int n = ::poll(&pollfds[0], pollfds.size(), 500);// 500ms timeout to check g_stop
 		if (n < 0) {
-			if (errno == EINTR)
-				continue; // interrupted by signal, retry
-			perror("poll");
-			break;
+			if (errno == EINTR) continue; // interrupted by signal, retry
+			throw std::runtime_error(std::string("poll: ") + std::strerror(errno));
 		}
 	
-		//1. found new connection on listening socket, call accept()
-		if (!pollfds.empty() && (pollfds[0].revents & POLLIN)) {
-			while (true)
-			{
-				sockaddr_in clientAddr;
-				socklen_t clientLen = sizeof(clientAddr);
-				int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
-				if (connfd < 0) {
-					if (errno == EAGAIN || errno == EWOULDBLOCK)
-						break; // no more incoming connections
-					perror("accept");
-					continue;
-				}
-				setNonBlocking(connfd);
-				addPollFd(pollfds, connfd, POLLIN);
+		//1. accept new connections
+		acceptNew();
+		// if (!pollfds.empty() && (pollfds[0].revents & POLLIN)) {
+		// 	while (true)
+		// 	{
+		// 		sockaddr_in clientAddr;
+		// 		socklen_t clientLen = sizeof(clientAddr);
+		// 		int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
+		// 		if (connfd < 0) {
+		// 			if (errno == EAGAIN || errno == EWOULDBLOCK)
+		// 				break; // no more incoming connections
+		// 			perror("accept");
+		// 			continue;
+		// 		}
+		// 		setNonBlocking(connfd);
+		// 		addPollFd(pollfds, connfd, POLLIN);
 				
-				inbuff[connfd] = ""; // initialize buffer for this client
-				// outbuff[connfd] = ""; // initialize send buffer for this client
-				outbuff[connfd] += "server NOTICE * :Welcome!\r\n";
-				pollfds.back().events |= POLLOUT; // we just added connfd at the back
-
-
-				char ipStr[INET_ADDRSTRLEN];
-				inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, sizeof(ipStr));
-				std::cout << "New connection from " << ipStr << ":" << ntohs(clientAddr.sin_port) 
-							<< ", fd=" << connfd << "\n";
-			}
-		}
+		// 		inbuff[connfd] = ""; // initialize buffer for this client
+		// 		outbuff[connfd] += "server NOTICE * :Welcome!\r\n";
+		// 		pollfds.back().events |= POLLOUT; // we just added connfd at the back
+		// 		logNew(connfd);
+		// 	}
+		// }
 		
 
 		//2. handle each client socket， increment i only if not removed
@@ -169,108 +320,91 @@ void Server::run(){
 			short re = pollfds[i].revents;
 			bool removed = false;
 
-			//2.1 Errors/Hangups (POLLERR | POLLHUP | POLLNVAL):close fd, erase from maps/poll list.
-			//清理客户端（离开所有频道、关闭 fd、移除数据结构）
+			//2.1 Errors/Hangups (POLLERR | POLLHUP | POLLNVAL)
 			if (re & (POLLERR | POLLHUP | POLLNVAL))
 			{
-				std::cout << "[-] client fd=" << fd << " closed (err/hup)\n";
-				::close(fd);
-				inbuff.erase(fd);
-				outbuff.erase(fd);
-				//todo: remove from channels, nicknames, etc.
-				removePollFd(pollfds, i); //pop back swap
+				cleanupIndex(i);
 				removed = true;
 			}
 			
-			//2.2 handle readable fds: keep receiving and appending until EAGAIN, then extract lines, process them, generate responses
-			// POLLIN → recv() 循环读入 inbuf（直到 EAGAIN）→ 按 \n 切出完整行（去尾部 \r）→ 解析命令 → 产出响应（写入 outbuf）→ 若 outbuf 非空，打开 POLLOUT
+			//2.2 handle readable fds
 			if (!removed && (re & POLLIN))
 			{
-				char buf[4096];
-				while (true)
-				{
-					//
-					ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
-					if (r > 0){
-						inbuff[fd].append(buf, r);
-					} else if (r == 0) {
-						//client closed connection
-						std::cout << "[-] client fd=" << fd << " closed\n";
-						::close(fd);
-						inbuff.erase(fd);
-						outbuff.erase(fd);
-						removePollFd(pollfds, i); //pop back swap
-						removed = true;
-						break;
-					} else {
-						if (errno == EAGAIN || errno == EWOULDBLOCK)
-							break; // no more data
-						perror("recv");
-						::close(fd);
-						inbuff.erase(fd);
-						outbuff.erase(fd);
-						removePollFd(pollfds, i); //pop back swap
-						removed = true;
-						break;
-					}
+				removed = handleReadable(i);
+				// if i was removed in handleReadable
+				if (i >= pollfds.size() || pollfds[i].fd != fd) {
+					removed = true;
 				}
 
-				// parse complete lines from inbuff and echo back (line + CRLF)
-				if (!removed)
-				{
-					std::string line;
-					while (getLine(inbuff[fd], line)) {
-						//echo back only
-						// outbuff[fd] += line;
-						// outbuff[fd] += "\r\n";
-
-
+				// char buf[4096];
+				// while (true)
+				// {
+				// 	ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
+				// 	if (r > 0){
+				// 		inbuff[fd].append(buf, r);
+				// 	} else if (r == 0) {
 						
-						//send client message to other clients
-						for (size_t j = 1; j < pollfds.size(); ++j) {
-							int other = pollfds[j].fd;
-							if (other == fd) continue;// skip sender 
-							outbuff[other] += line;
-							outbuff[other] += "\r\n";
-							pollfds[j].events |= POLLOUT;
-						}
+				// 		cleanupIndex(i);
+				// 		removed = true;
+				// 		break;
+				// 	} else {
+				// 		if (errno == EAGAIN || errno == EWOULDBLOCK)
+				// 			break; // no more data
+				// 		logErr("recv");
+				// 		cleanupIndex(i);
+				// 		removed = true;
+				// 		break;
+				// 	}
+				// }
 
-						//todo: parse IRC commands here, generate responses into outbuff (also need to handle empty input)
-					}
+				// // parse complete lines from inbuff and echo back (line + CRLF)
+				// if (!removed)
+				// {
+				// 	std::string line;
+				// 	while (getLine(inbuff[fd], line)) {
+				// 		// trim spaces
+				// 		while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
+
+				// 		if (line == "QUIT") {
+				// 			::shutdown(fd, SHUT_RDWR);
+				// 			continue;
+				// 		}
+				// 		if (line == "WHO") {
+				// 			std::string reply = "USERS:";
+				// 			for (size_t k = 1; k < pollfds.size(); ++k) {
+				// 				reply += " fd=" + std::to_string(pollfds[k].fd);
+				// 			}
+				// 			outbuff[fd] += reply + "\r\n";
+				// 			// ensure POLLOUT for this fd
+				// 			for (size_t k = 1; k < pollfds.size(); ++k)
+				// 				if (pollfds[k].fd == fd) { pollfds[k].events |= POLLOUT; break; }
+				// 			continue; // don't broadcast WHO
+				// 		}
+						
+				// 		//send client message to other clients
+				// 		for (size_t j = 1; j < pollfds.size(); ++j) {
+				// 			int other = pollfds[j].fd;
+				// 			if (other == fd) continue;// skip sender 
+				// 			if (outbuff[other].size() + line.size() + 2 <= MAX_OUTBUF) {
+				// 				outbuff[other] += line + "\r\n";
+				// 				pollfds[j].events |= POLLOUT;
+				// 			}
+				// 		}
+
+				// 		//todo: parse IRC commands here, generate responses into outbuff (also need to handle empty input)
+				// 	}
 					
-					// if outbuff is not empty, enable POLLOUT
-					if (!outbuff[fd].empty()) {
-						pollfds[i].events = POLLIN | POLLOUT; // enable write readiness
-					}
-				}
+				// 	// if outbuff is not empty, enable POLLOUT
+				// 	if (!outbuff[fd].empty()) {
+				// 		pollfds[i].events = POLLIN | POLLOUT; // enable write readiness
+				// 	}
+				// }
 			}
 			
 			//2.3 handle writable from outbuff
 			// POLLOUT → 从 outbuf 尽量 send()（直到 EAGAIN）→ 发送完则关闭 POLLOUT
-			if (!removed && (re & POLLOUT))
-			{
-				std::string &ob = outbuff[fd];
-				while (!ob.empty())
-				{
-					ssize_t w = ::send(fd, ob.data(), ob.size(), 0);
-					if (w > 0) {
-						ob.erase(0, w);// remove sent data
-					} else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-						break; // cannot send more now (对方 TCP 接收窗口满了、内核发送缓冲不够等)
-					} else {
-						perror("send");
-						::close(fd);
-						inbuff.erase(fd);
-						outbuff.erase(fd);
-						removePollFd(pollfds, i);
-						removed = true;
-						break;
-					}
-				}
-				
-				if (!removed && ob.empty()) {
-					pollfds[i].events = POLLIN;//all sent
-				}
+			if (!removed && (re & POLLOUT)) {
+				removed = handleWritable(i);
 			}
 
             if (!removed) ++i; // manually increment if not removed

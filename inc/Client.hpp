@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/14 00:14:04 by junjun           ###   ########.fr       */
+/*   Updated: 2025/09/27 18:01:23 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,7 +19,7 @@
 
 class Client {
 private:
-	int fd;
+	int fd{-1};
 	bool registered; // whether the client has completed registration
 	std::string nick, user, realname, hostname;
 	std::string inbox, outbox; // buffers for incoming and outgoing data
