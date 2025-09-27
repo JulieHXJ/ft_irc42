@@ -32,6 +32,8 @@ class Channel {
 
 	public:
 		Channel(const std::string& name);
+		Channel(const Channel& other);
+		Channel& operator=(const Channel& other);
 		~Channel();
 
 		// Getters
@@ -41,7 +43,7 @@ class Channel {
     	bool		isFull() const;
     
 		// Member management
-    	bool addMember(Client* client, const std::string& password = "");
+    	bool addMember(Client* client, const std::string& password);
     	void removeMember(const std::string& nickname);
     	bool isMember(const std::string& nickname) const;
     
@@ -55,10 +57,10 @@ class Channel {
     	bool isInvited(const std::string& nickname) const;
     
     	// Message broadcasting
-		void broadcast(const std::string &msg, Client* exclude = nullptr);
+		void broadcast(const std::string &msg, Client* exclude);
     
 	    // Mode management
-    	void setMode(char mode, bool set, const std::string& param = "");
+    	void setMode(char mode, bool set, const std::string& param);
     	std::string getModesString() const;
     
     	// Topic management
@@ -69,6 +71,6 @@ class Channel {
 		bool kickMember(Client* requester, const std::string& targetNickname, const std::string& reason);
     
 		// Validation methods
-    	bool canJoin(Client* client, const std::string& password = "");
+    	bool canJoin(Client* client, const std::string& password);
 		// void setOperatorPrivilege(const std::string& nickname, bool isOperator);
 };
