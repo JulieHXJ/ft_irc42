@@ -1,6 +1,8 @@
 
 # ✅ IRC Server Project – To-Do List
 
+---
+
 ## 0. Setup & Basics
 
 * [x] **Makefile** (compile all sources with `-Wall -Wextra -Werror -std=c++98`)
@@ -16,7 +18,7 @@
 
 * [x] Accept multiple clients (`accept` until `EAGAIN`)
 * [x] Store per-client buffers (`inbuff`, `outbuff`)
-* [ ] ✅ Introduce `Client` struct (fd, ip, port, buffers, nick/user)
+* [ ] ✅ Introduce `Client` struct/class (fd, ip, port, buffers, nick/user)
 * [ ] Switch from `map<int, string>` → `map<int, Client>` (step by step)
 * [ ] Add helper: `cleanupClient(fd)` to close & erase
 
@@ -94,6 +96,5 @@
 
 ---
 
-✅ **Workflow tip**:
+✅ **Workflow tip:**
 Do one block at a time → test with `nc` (netcat) → then test with a real IRC client (irssi, weechat).
-

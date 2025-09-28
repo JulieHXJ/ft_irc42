@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/08 15:49:16 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/27 17:53:34 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/09/28 19:09:48 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,9 +16,17 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <atomic>
 volatile sig_atomic_t g_stop = 0;  // signal flag defination
 static void onSig(int){ g_stop = 1; } //handler
+
+static int parsePort(int argc, char** argv) {
+    int port = (argc >= 2) ? std::atoi(argv[1]) : 6667;
+    if (port <= 0 || port > 65535) {
+        throw std::invalid_argument("invalid port (must be 1..65535)");
+    }
+    return port;
+}
+
 
 /**
  * Main entry point for the IRC server.
@@ -27,12 +35,17 @@ static void onSig(int){ g_stop = 1; } //handler
 int main(int argc, char** argv) {
     try
     {
-        int port = (argc >= 2) ? std::atoi(argv[1]) : 6667; // default port 6667
+        const int port = parsePort(argc, argv);
         
-        if (std::signal(SIGPIPE, SIG_IGN) == SIG_ERR ||
-            std::signal(SIGINT,  onSig)    == SIG_ERR ||
-            std::signal(SIGQUIT, onSig)    == SIG_ERR) {
-                throw std::runtime_error("failed to set signal handlers");
+        // Ignore SIGPIPE (safe even if send() uses MSG_NOSIGNAL)
+        if (std::signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+            throw std::runtime_error("failed to set SIGPIPE");
+
+        // Graceful stop on Ctrl-C, SIGQUIT, SIGTERM
+        if (std::signal(SIGINT,  onSig) == SIG_ERR ||
+            std::signal(SIGQUIT, onSig) == SIG_ERR ||
+            std::signal(SIGTERM, onSig) == SIG_ERR) {
+            throw std::runtime_error("failed to set signal handlers");
         }
         
         Server server;

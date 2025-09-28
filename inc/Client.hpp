@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/27 18:01:23 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/09/28 16:16:37 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -37,6 +37,16 @@ public:
 
 	void clearInbox() { inbox.clear(); }
 	void clearOutbox() { outbox.clear(); }
+
+
+	bool isRegistered() const { return registered; }
+	std::string prefix() const {  // ":nick!user@host"
+		return ":" + nick + "!" + user + "@" + host;
+	}
+
+	void joinChannel(std::string const& name) { channels.insert(name); }
+	void leaveChannel(std::string const& name){ channels.erase(name); }
+
 };
 
 #endif // CLIENT_HPP

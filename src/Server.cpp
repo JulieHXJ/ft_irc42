@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Server.cpp                                         :+:      :+:    :+:   */
+/*   Server_Mac.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/28 15:46:20 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/09/28 19:33:18 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,8 +17,9 @@
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
-
+#include <sstream>          // std::ostringstream
 #include <csignal>
+
 extern volatile sig_atomic_t g_stop;// define in main (“There is a variable called g_stop, it’s declared elsewhere, it can change suddenly (signal), and I want to use it here.”)
 
 namespace {
@@ -27,10 +28,10 @@ namespace {
 	void logErr(const char* str){ perror(str); }
 	
 	void logNew(int fd, const sockaddr_in& clientAddr){ 
-		char ipStr[INET_ADDRSTRLEN];
-		::inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, sizeof(ipStr));
-		std::cout << "[+] New connection from " << ipStr << ":" 
-					<< ntohs(clientAddr.sin_port) << ", fd=" << fd << "\n";}
+		const char* ip = ::inet_ntoa(clientAddr.sin_addr);
+		unsigned short port = ntohs(clientAddr.sin_port);
+		std::cout << "[+] New connection from " << (ip ? ip : "?") << ":" << port << ", fd=" << fd << "\n";
+	}
 	
 	void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
 }
@@ -38,12 +39,9 @@ namespace {
 
 //helpers
 void Server::setNonBlocking(int fd){
-	int flags = ::fcntl(fd, F_GETFL, 0);
-	if (flags == -1) {
-        throw std::runtime_error(std::string("fcntl(F_GETFL): ") + std::strerror(errno));
-    }
-    if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        throw std::runtime_error(std::string("fcntl(F_SETFL,O_NONBLOCK): ") + std::strerror(errno));
+	if (::fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
+        throw std::runtime_error(std::string("fcntl(F_SETFL,O_NONBLOCK): ")
+                                 + std::strerror(errno));
     }
 }
 
@@ -63,8 +61,11 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
  * @note swap with the last one and pop_back
  */
 void Server::removePollFd(std::vector<pollfd>& pfds, size_t index) {
-	pfds[index] = pfds.back();
-	pfds.pop_back();
+	if (pfds.empty())
+        return; // safety guard
+
+    pfds[index] = pfds[ pfds.size() - 1 ];  // copy last element into index
+    pfds.pop_back();   
 }
 
 /**
@@ -174,8 +175,8 @@ void Server::acceptNew(){
         inbuff[connfd].clear();
         outbuff[connfd] += ":Server NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹\r\n";
         // enable write for the newly added (it's at the back)
-        pollfds.back().events |= POLLOUT;
-
+        pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
+		
         logNew(connfd, clientAddr);
     }
 }
@@ -201,6 +202,7 @@ bool Server::handleReadable(size_t i){
 	if (i >= pollfds.size()) return false; //safety check
 	int fd = pollfds[i].fd;
     char buf[4096];
+	
 	// 1) read in buffer
 	for(;;){
         ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
@@ -223,10 +225,12 @@ bool Server::handleReadable(size_t i){
 	while (getLine(inbuff[fd], line)) {
 		// trim spaces
 		while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
+		
 		// handleCmd(fd, line); // todo
-        if (line == "QUIT") {
-            ::shutdown(fd, SHUT_RDWR); // next poll/recv sees close
-            continue;
+		
+        if (line == "KILL") {
+            cleanupIndex(i);
+            return true;
         }
         if (line == "WHO") {
             std::string reply = "USERS:";
@@ -260,8 +264,8 @@ bool Server::handleReadable(size_t i){
 bool Server::handleWritable(size_t i){
 	if (i >= pollfds.size()) return false; //safety check
 	int fd = pollfds[i].fd;
-
 	std::string &ob = outbuff[fd];
+	
 	while (!ob.empty()){
 		ssize_t w = ::send(fd, ob.data(), ob.size(), 0);
 		if (w > 0) {
@@ -282,6 +286,7 @@ void Server::run(){
 	while (true)
 	{
 		if (g_stop) break; // exit loop
+		
 		int n = ::poll(&pollfds[0], pollfds.size(), 500);// 500ms timeout to check g_stop
 		if (n < 0) {
 			if (errno == EINTR) continue; // interrupted by signal, retry
@@ -291,7 +296,6 @@ void Server::run(){
 		//1. accept new connections
 		acceptNew();
 		
-
 		//2. handle each client socket， increment i only if not removed
 		for (size_t i = 1; i < pollfds.size();)
 		{
@@ -310,7 +314,7 @@ void Server::run(){
 			if (!removed && (re & POLLIN))
 			{
 				removed = handleReadable(i);
-				// if i was removed in handleReadable
+				// if index was removed in handleReadable
 				if (i >= pollfds.size() || pollfds[i].fd != fd) {
 					removed = true;
 				}
@@ -321,5 +325,41 @@ void Server::run(){
             if (!removed) ++i; // manually increment if not removed
         	}
 		}
+    }
+}
+
+
+
+
+void Server::pushLine(int fd, const std::string& msgCRLF) {
+    std::string& ob = outbuff[fd];
+    ob.append(msgCRLF);
+    // ensure POLLOUT is set on this fd
+    for (size_t i = 1; i < pollfds.size(); ++i) {
+        if (pollfds[i].fd == fd) {
+            pollfds[i].events |= POLLOUT;
+            break;
+        }
+    }
+}
+
+void Server::sendNumeric(int fd, const std::string& code,
+                         const std::string& p1, const std::string& msg) {
+    std::string line;
+    line.reserve(64 + code.size() + p1.size() + msg.size());
+    line += code;
+    if (!p1.empty()) { line += " "; line += p1; }
+    if (!msg.empty()) { line += " :"; line += msg; }
+    line += "\r\n";
+    pushLine(fd, line);
+}
+
+void Server::pushToChannel(Channel& ch, const std::string& line, int exceptFd) {
+    // Assumes Channel exposes: const std::vector<int>& members() const;
+    const std::vector<int>& mem = ch.members();
+    for (size_t i = 0; i < mem.size(); ++i) {
+        int mfd = mem[i];
+        if (mfd == exceptFd) continue;
+        pushLine(mfd, line);
     }
 }
