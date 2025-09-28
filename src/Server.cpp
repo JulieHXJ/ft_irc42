@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/27 18:02:08 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/09/28 15:46:20 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -290,27 +290,6 @@ void Server::run(){
 	
 		//1. accept new connections
 		acceptNew();
-		// if (!pollfds.empty() && (pollfds[0].revents & POLLIN)) {
-		// 	while (true)
-		// 	{
-		// 		sockaddr_in clientAddr;
-		// 		socklen_t clientLen = sizeof(clientAddr);
-		// 		int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
-		// 		if (connfd < 0) {
-		// 			if (errno == EAGAIN || errno == EWOULDBLOCK)
-		// 				break; // no more incoming connections
-		// 			perror("accept");
-		// 			continue;
-		// 		}
-		// 		setNonBlocking(connfd);
-		// 		addPollFd(pollfds, connfd, POLLIN);
-				
-		// 		inbuff[connfd] = ""; // initialize buffer for this client
-		// 		outbuff[connfd] += "server NOTICE * :Welcome!\r\n";
-		// 		pollfds.back().events |= POLLOUT; // we just added connfd at the back
-		// 		logNew(connfd);
-		// 	}
-		// }
 		
 
 		//2. handle each client socket， increment i only if not removed
@@ -335,79 +314,12 @@ void Server::run(){
 				if (i >= pollfds.size() || pollfds[i].fd != fd) {
 					removed = true;
 				}
-
-				// char buf[4096];
-				// while (true)
-				// {
-				// 	ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
-				// 	if (r > 0){
-				// 		inbuff[fd].append(buf, r);
-				// 	} else if (r == 0) {
-						
-				// 		cleanupIndex(i);
-				// 		removed = true;
-				// 		break;
-				// 	} else {
-				// 		if (errno == EAGAIN || errno == EWOULDBLOCK)
-				// 			break; // no more data
-				// 		logErr("recv");
-				// 		cleanupIndex(i);
-				// 		removed = true;
-				// 		break;
-				// 	}
-				// }
-
-				// // parse complete lines from inbuff and echo back (line + CRLF)
-				// if (!removed)
-				// {
-				// 	std::string line;
-				// 	while (getLine(inbuff[fd], line)) {
-				// 		// trim spaces
-				// 		while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
-
-				// 		if (line == "QUIT") {
-				// 			::shutdown(fd, SHUT_RDWR);
-				// 			continue;
-				// 		}
-				// 		if (line == "WHO") {
-				// 			std::string reply = "USERS:";
-				// 			for (size_t k = 1; k < pollfds.size(); ++k) {
-				// 				reply += " fd=" + std::to_string(pollfds[k].fd);
-				// 			}
-				// 			outbuff[fd] += reply + "\r\n";
-				// 			// ensure POLLOUT for this fd
-				// 			for (size_t k = 1; k < pollfds.size(); ++k)
-				// 				if (pollfds[k].fd == fd) { pollfds[k].events |= POLLOUT; break; }
-				// 			continue; // don't broadcast WHO
-				// 		}
-						
-				// 		//send client message to other clients
-				// 		for (size_t j = 1; j < pollfds.size(); ++j) {
-				// 			int other = pollfds[j].fd;
-				// 			if (other == fd) continue;// skip sender 
-				// 			if (outbuff[other].size() + line.size() + 2 <= MAX_OUTBUF) {
-				// 				outbuff[other] += line + "\r\n";
-				// 				pollfds[j].events |= POLLOUT;
-				// 			}
-				// 		}
-
-				// 		//todo: parse IRC commands here, generate responses into outbuff (also need to handle empty input)
-				// 	}
-					
-				// 	// if outbuff is not empty, enable POLLOUT
-				// 	if (!outbuff[fd].empty()) {
-				// 		pollfds[i].events = POLLIN | POLLOUT; // enable write readiness
-				// 	}
-				// }
-			}
-			
-			//2.3 handle writable from outbuff
-			// POLLOUT → 从 outbuf 尽量 send()（直到 EAGAIN）→ 发送完则关闭 POLLOUT
 			if (!removed && (re & POLLOUT)) {
 				removed = handleWritable(i);
 			}
 
             if (!removed) ++i; // manually increment if not removed
-        }
+        	}
+		}
     }
 }
