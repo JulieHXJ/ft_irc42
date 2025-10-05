@@ -43,9 +43,28 @@ std::string Channel::getTopic() const { return topic; }
 
 int Channel::getMemberCount() const { return members.size(); }
 
-// bool Channel::isFull() const;
+bool Channel::isFull() const {
+    return (maxUserLimit > 0 && members.size() >= maxUserLimit);
+}
 
-// bool Channel::addMember(Client* client, const std::string& password);
+bool Channel::addMember(Client* client, const std::string& password)
+{
+    if (!canJoin(client, password)) {
+        return false;
+    }
+    members[client->getNickname()] = client;
+    invitedUsers.erase(client->getNickname());
+    if (members.size() == 1) {
+        operators[client->getNickname()] = client;
+    }
+    std::string joinMsg = ":" + client->getNickname() + " JOIN " + name; // :john!johndoe@localhost JOIN #general
+    broadcast(joinMsg);
+    if (!topic.empty()) {
+        client->sendMessage(":" + std::string(SERVER_NAME) + " 332 " + client->getNickname() + " " + name + " :" + topic);
+    }
+    // sendNamesList(client);  do we need to send name list to the joining client?
+    return true;
+}
 
 void Channel::removeMember(const std::string& nickname) {
     members.erase(nickname);
@@ -91,13 +110,32 @@ std::string Channel::getModesString() const {
     return modes;
 }
 
-void Channel::setTopic(const std::string& newTopic, Client* setter) { topic = newTopic; }
+// void Channel::setTopic(const std::string& newTopic, Client* setter) { topic = newTopic; }
 
 // bool Channel::canChangeTopic(const std::string& nickname) const;
 
-// bool Channel::kickMember(Client* requester, const std::string& targetNickname, const std::string& reason);
+// bool Channel::kickMember(Client* requester, const std::string& targetNickname, const std::string& reason); -->client->getfd()
 
-// bool Channel::canJoin(Client* client, const std::string& password);
+bool Channel::canJoin(Client* client, const std::string& password)
+{
+    if (isMember(client->getNickname())) {
+        client->sendMessage("443 " + client->getNickname() + " " + name + " :is already on channel");
+        return false;
+    }
+    if (!passKey.empty() && passKey != password) {
+        client->sendMessage("475 " + client->getNickname() + " " + name + " :Cannot join channel (+k)");
+        return false;
+    }
+    if (inviteOnly && !isInvited(client->getNickname())) {
+        client->sendMessage("473 " + client->getNickname() + " " + name + " :Cannot join channel (+i)");
+        return false;
+    }
+    if (isFull()) {
+        client->sendMessage("471 " + client->getNickname() + " " + name + " :Cannot join channel (+l)");
+        return false;
+    }
+    return true;
+}
 
 
 
@@ -114,31 +152,7 @@ void Channel::setTopic(const std::string& newTopic, Client* setter) { topic = ne
 //         operators.erase(nickname);
 //     }
 // }
-// bool Channel::addMember(Client* client, const std::string& password) {
-//     // Check if the client is already a member?
-//     if (members.find(client->getNickname()) != members.end()) {
-//         return false; // already in the channel
-//     }
-//     // Check password if the channel is password protected
-//     if (!passKey.empty() && passKey != password) {
-//         return false;
-//     }
-//     // Check invite-only
-//     if (inviteOnly) {
-//         if (invited.find(client->getNickname()) == invited.end()) {
-//             return false;
-//         } else {
-//             // Remove the invite after use
-//             invited.erase(client->getNickname());
-//         }
-//     }
-//     // Check user limit
-//     if (maxUserLimit > 0 && members.size() >= maxUserLimit) {
-//         return false;
-//     }
-//     members[client->getNickname()] = client;
-//     return true;
-// }
+
 // void Channel::kickMember(const std::string& nickname) {
 //     removeMember(nickname);
 // }

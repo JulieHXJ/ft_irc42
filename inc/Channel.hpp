@@ -24,7 +24,7 @@ class Channel {
     	std::string	passKey;			// +k mode
     	bool		inviteOnly;			// +i mode
     	bool		topicRestriction;	// +t mode
-    	int			maxUserLimit;		// +l mode
+    	size_t		maxUserLimit;		// +l mode
 
     	std::unordered_map<std::string, Client*>	members;		// All channel members
     	std::unordered_map<std::string, Client*>	operators;      // Channel operators only
