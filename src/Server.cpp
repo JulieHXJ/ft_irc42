@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Server_Mac.cpp                                     :+:      :+:    :+:   */
+/*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/28 19:33:18 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/07 19:11:52 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,27 +22,36 @@
 
 extern volatile sig_atomic_t g_stop;// define in main (“There is a variable called g_stop, it’s declared elsewhere, it can change suddenly (signal), and I want to use it here.”)
 
+static const size_t MAX_OUTBUF = 256 * 1024;
+
 namespace {
+
+	void logNew(int fd, const sockaddr_in& a){
+        char ip[INET_ADDRSTRLEN] = {0};
+        ::inet_ntop(AF_INET, &a.sin_addr, ip, sizeof(ip));
+        std::cout << "[+] New connection from " << ip << ":" << ntohs(a.sin_port)
+                  << ", fd=" << fd << "\n";
+    }
 	
-	const size_t MAX_OUTBUF = 256 * 1024; // 256 KB per client
-	void logErr(const char* str){ perror(str); }
-	
-	void logNew(int fd, const sockaddr_in& clientAddr){ 
-		const char* ip = ::inet_ntoa(clientAddr.sin_addr);
-		unsigned short port = ntohs(clientAddr.sin_port);
-		std::cout << "[+] New connection from " << (ip ? ip : "?") << ":" << port << ", fd=" << fd << "\n";
-	}
-	
-	void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
+	// void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
 }
 
+Server::~Server(){
+    for (size_t i = 0; i < pollfds.size(); ++i) {
+        ::close(pollfds[i].fd);
+    }
+    std::map<int, Client*>::iterator it = fd2client.begin();//do i need it?
+    for (; it != fd2client.end(); ++it) delete it->second;
+}
 
 //helpers
 void Server::setNonBlocking(int fd){
-	if (::fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
-        throw std::runtime_error(std::string("fcntl(F_SETFL,O_NONBLOCK): ")
+	int flags = ::fcntl(fd, F_GETFL, 0);
+    if (flags == -1) flags = 0;
+    if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ")
                                  + std::strerror(errno));
-    }
+	}
 }
 
 /**
@@ -61,7 +70,7 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
  * @note swap with the last one and pop_back
  */
 void Server::removePollFd(std::vector<pollfd>& pfds, size_t index) {
-	if (pfds.empty())
+	if (pfds.empty() | index >= pfds.size())
         return; // safety guard
 
     pfds[index] = pfds[ pfds.size() - 1 ];  // copy last element into index
@@ -87,7 +96,17 @@ bool Server::getLine(std::string& inbuff, std::string& line) {
 	return true;
 }
 
-//server functions
+//todo: client functions
+void Client::sendMessage(const std::string& line) {
+    // ensure CRLF; server will not add if already present
+    std::string out = line;
+    if (out.size() < 2 || out[out.size()-2] != '\r' || out[out.size()-1] != '\n')
+        out += "\r\n";
+    if (server_) server_->pushLine(fd_, out);
+}
+
+
+/* ============================ server functions ============================ */
 void Server::closeFds(){
 	for (size_t i = 0; i < pollfds.size(); ++i) {
 		close(pollfds[i].fd);
@@ -102,7 +121,7 @@ void Server::serverInit(int port){
 	//1) Create socket. ipv4, tcp
 	listenfd = ::socket(AF_INET, SOCK_STREAM, 0); 
 	if (listenfd < 0) { 
-		throw std::runtime_error(std::string("socket: ") + std::strerror(errno));
+		throw std::runtime_error("socket failed");
 	} 
 	
 	//2) allow socket descriptor to be reusable
@@ -111,15 +130,15 @@ void Server::serverInit(int port){
 	//This is useful for server applications that need to restart and bind to the same port without waiting for the OS to release it.
 	int yes = 1;
     if (::setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
-        ::close(listenfd);
+		::close(listenfd);
         throw std::runtime_error(std::string("setsockopt(SO_REUSEADDR): ") + std::strerror(errno));
     }
-#ifdef SO_REUSEPORT
+	#ifdef SO_REUSEPORT
     if (::setsockopt(listenfd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)) < 0) {
-        ::close(listenfd);
+		::close(listenfd);
         throw std::runtime_error(std::string("setsockopt(SO_REUSEPORT): ") + std::strerror(errno));
     }
-#endif
+	#endif
 	
 	//3) bind
 	sockaddr_in addr; 
@@ -128,24 +147,66 @@ void Server::serverInit(int port){
 	addr.sin_addr.s_addr = htonl(INADDR_ANY); // bind to all local IPv4 interfaces 
 	addr.sin_port = htons(port); //bind the socket to IP and port 
 	if (::bind(listenfd, (sockaddr*)&addr, sizeof(addr)) < 0) {
-        ::close(listenfd);
-        throw std::runtime_error(std::string("bind: ") + std::strerror(errno));
+		::close(listenfd);
+        throw std::runtime_error("bind failed");
     }
 	
 	// 4) listen
     if (::listen(listenfd, 64) < 0) {
-        ::close(listenfd);
-        throw std::runtime_error(std::string("listen: ") + std::strerror(errno));
+		::close(listenfd);
+        throw std::runtime_error("listen failed");
     }
-	// 5) non-block + poll vector
+	
 	setNonBlocking(listenfd);
 	pollfds.clear();
 	addPollFd(pollfds, listenfd, POLLIN);
-
+	
 	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting clients)\n";
 }
 
 //main loop
+void Server::run(){
+	while (!g_stop)
+	{
+		if (pollfds.empty()) break; // exit loop if no fds to monitor
+		int n = ::poll(&pollfds[0], pollfds.size(), 500);// 500ms timeout to check g_stop
+		if (n < 0) {
+			if (errno == EINTR) continue; // interrupted by signal, retry
+			throw std::runtime_error(std::string("poll: ") + std::strerror(errno));
+		}
+	
+		//1. accept new connections
+		acceptNew();
+		
+		//2. handle each client socket， increment i only if not removed
+		for (size_t i = 1; i < pollfds.size();)
+		{
+			int fd = pollfds[i].fd;
+			short re = pollfds[i].revents;
+			bool removed = false;
+
+			//2.1 Errors/Hangups (POLLERR | POLLHUP | POLLNVAL)
+			if (re & (POLLERR | POLLHUP | POLLNVAL)) {
+				cleanupIndex(i);
+				removed = true;
+			}
+			
+			//2.2 handle readable fds
+			if (!removed && (re & POLLIN)) {
+				removed = handleReadable(i);
+				if (removed) continue;
+			}
+			//2.3 handle writable fds
+			if (!removed && (re & POLLOUT)) {
+				removed = handleWritable(i);
+				if (removed) continue;
+			}
+			if (!removed) ++i; // manually increment if not removed
+		}
+	}
+}
+
+
 
 /**
  * @brief Accept new incoming connections on the listening socket. 
@@ -166,14 +227,25 @@ void Server::acceptNew(){
         setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN);
 
-
-		//build a client object here and store it
-		// Client c;
-		// c.fd = connfd;
-
         // initialize buffer for this client
         inbuff[connfd].clear();
-        outbuff[connfd] += ":Server NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹\r\n";
+		outbuff[connfd].clear();
+		
+        // outbuff[connfd] += ":Server NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹\r\n";
+		// create Client
+        Client* c = new Client(cfd);
+        c->attachServer(this);
+        fd2client[cfd] = c;
+
+        // greeting
+        c->sendMessage(":"
+            + std::string(SERVER_NAME)
+            + " NOTICE * :Welcome to Club42 ✨");
+
+
+
+
+		
         // enable write for the newly added (it's at the back)
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
 		
@@ -186,12 +258,18 @@ void Server::acceptNew(){
  */
 void Server::cleanupIndex(size_t i){
     int fd = pollfds[i].fd;
-    logClose(fd);
+
+	 // remove from channel membership
+	 removeClientFromAllChannels(fd);
+
+	 // erase nick map entry if any
+	
+    
     ::close(fd);
     inbuff.erase(fd);
     outbuff.erase(fd);
-    // TODO: remove from channels, nick maps when you add them
     removePollFd(pollfds, i); //pop back swap
+	std::cout << "[-] fd=" << fd << " closed\n";
 }
 
 /**
@@ -199,7 +277,6 @@ void Server::cleanupIndex(size_t i){
  * then extract lines, process command, generate responses
  */
 bool Server::handleReadable(size_t i){
-	if (i >= pollfds.size()) return false; //safety check
 	int fd = pollfds[i].fd;
     char buf[4096];
 	
@@ -214,7 +291,7 @@ bool Server::handleReadable(size_t i){
             return true; // inde was swap-removed; caller must not ++i
         } else {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-            logErr("recv");
+            std::perror("recv");
             cleanupIndex(i);
             return true;
         }
@@ -225,33 +302,36 @@ bool Server::handleReadable(size_t i){
 	while (getLine(inbuff[fd], line)) {
 		// trim spaces
 		while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
+		if (line.empty()) continue;
 		
-		// handleCmd(fd, line); // todo
+        // if (line == "KILL") {
+		// 	cleanupIndex(i);
+        //     return true;
+        // }
+        // if (line == "WHO") {
+		// 	std::ostringstream oss;
+		// 	oss << "USERS:";
+        //     for (size_t k = 1; k < pollfds.size(); ++k) {
+		// 		oss << "fd = " << pollfds[k].fd;
+		// 	}
+        //     outbuff[fd] += oss.str() + "\r\n";
+        //     // ensure POLLOUT on this fd
+        //     pollfds[i].events |= POLLOUT;
+        //     continue;
+        // }
 		
-        if (line == "KILL") {
-            cleanupIndex(i);
-            return true;
-        }
-        if (line == "WHO") {
-            std::string reply = "USERS:";
-            for (size_t k = 1; k < pollfds.size(); ++k)
-                reply += " fd=" + std::to_string(pollfds[k].fd);
-            outbuff[fd] += reply + "\r\n";
-            // ensure POLLOUT on this fd
-            pollfds[i].events |= POLLOUT;
-            continue;
-        }
-
+		handleCmd(fd, line); // todo: command handler functions in Server_cmd.cpp
+		
         // broadcast to all other clients
-        for (size_t j = 1; j < pollfds.size(); ++j) {
-            int other = pollfds[j].fd;
-            if (other == fd) continue;
-            if (outbuff[other].size() + line.size() + 2 <= MAX_OUTBUF) {
-                outbuff[other] += line;
-                outbuff[other] += "\r\n";
-                pollfds[j].events |= POLLOUT;
-            }
-        }
+        // for (size_t j = 1; j < pollfds.size(); ++j) {
+		// 	int other = pollfds[j].fd;
+        //     if (other == fd) continue;
+        //     if (outbuff[other].size() + line.size() + 2 <= MAX_OUTBUF) {
+		// 		outbuff[other] += line;
+        //         outbuff[other] += "\r\n";
+        //         pollfds[j].events |= POLLOUT;
+        //     }
+        // }
 	}
 	
     // If output is nnot empty (from WHO/welcome), keep POLLOUT on
@@ -262,7 +342,6 @@ bool Server::handleReadable(size_t i){
 }
 
 bool Server::handleWritable(size_t i){
-	if (i >= pollfds.size()) return false; //safety check
 	int fd = pollfds[i].fd;
 	std::string &ob = outbuff[fd];
 	
@@ -273,7 +352,7 @@ bool Server::handleWritable(size_t i){
 		} else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
 			return false; // cannot send more now (对方 TCP 接收窗口满了、内核发送缓冲不够等)
 		} else {
-			logErr("send");
+			std::perror("send");
 			cleanupIndex(i);
 			return true;//index is removed
 		}
@@ -282,58 +361,10 @@ bool Server::handleWritable(size_t i){
 	return false;
 }
 
-void Server::run(){
-	while (true)
-	{
-		if (g_stop) break; // exit loop
-		
-		int n = ::poll(&pollfds[0], pollfds.size(), 500);// 500ms timeout to check g_stop
-		if (n < 0) {
-			if (errno == EINTR) continue; // interrupted by signal, retry
-			throw std::runtime_error(std::string("poll: ") + std::strerror(errno));
-		}
-	
-		//1. accept new connections
-		acceptNew();
-		
-		//2. handle each client socket， increment i only if not removed
-		for (size_t i = 1; i < pollfds.size();)
-		{
-			int fd = pollfds[i].fd;
-			short re = pollfds[i].revents;
-			bool removed = false;
-
-			//2.1 Errors/Hangups (POLLERR | POLLHUP | POLLNVAL)
-			if (re & (POLLERR | POLLHUP | POLLNVAL))
-			{
-				cleanupIndex(i);
-				removed = true;
-			}
-			
-			//2.2 handle readable fds
-			if (!removed && (re & POLLIN))
-			{
-				removed = handleReadable(i);
-				// if index was removed in handleReadable
-				if (i >= pollfds.size() || pollfds[i].fd != fd) {
-					removed = true;
-				}
-			if (!removed && (re & POLLOUT)) {
-				removed = handleWritable(i);
-			}
-
-            if (!removed) ++i; // manually increment if not removed
-        	}
-		}
-    }
-}
-
-
-
-
-void Server::pushLine(int fd, const std::string& msgCRLF) {
-    std::string& ob = outbuff[fd];
-    ob.append(msgCRLF);
+void Server::pushLine(int fd, const std::string& msg) {
+    std::map<int, std::string>::iterator it = outbuff.find(fd);
+    if (it == outbuff.end()) return;
+    it->second.append(msg);
     // ensure POLLOUT is set on this fd
     for (size_t i = 1; i < pollfds.size(); ++i) {
         if (pollfds[i].fd == fd) {
@@ -343,8 +374,9 @@ void Server::pushLine(int fd, const std::string& msgCRLF) {
     }
 }
 
-void Server::sendNumeric(int fd, const std::string& code,
-                         const std::string& p1, const std::string& msg) {
+
+//unfinished
+void Server::sendNumeric(int fd, const std::string& code, const std::string& p1, const std::string& msg) {
     std::string line;
     line.reserve(64 + code.size() + p1.size() + msg.size());
     line += code;

@@ -1,55 +1,93 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Chanel.hpp                                         :+:      :+:    :+:   */
+/*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/28 16:23:06 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/07 18:21:40 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef CHANEL_HPP
 #define CHANEL_HPP
 
+#pragma once
+#include "Client.hpp"
+
 #include <string>
 #include <set>
+#include <map> //std::unordered_map & std::unordered_set are from C++11
 
-
-struct ChanModes {
-    bool t{false};                       // topic protected
-    bool i{false};                       // invite-only
-    std::optional<std::string> key;      // +k
-    std::optional<size_t>      limit;    // +l
-};
 
 class Channel {
 private:
 	std::string name;
 	std::string topic;
-	size_t maxUsers;
-	size_t currentUsers;
-	ChanModes modes;
+	std::string passKey; // +k mode 
+	bool inviteOnly; // +i mode 
+	bool topicRestriction; // +t mode 
+	size_t maxUserLimit; // +l mode
 
-	std::set<int> members; // set of client fds
-	std::set<int> operators; // set of operator fds
+    std::map<std::string, Client*> members;// members: nickname -> Client*
+    std::set<std::string>          operators;// operators: just nicknames
+    std::set<std::string>          invitedUsers;// invited nicknames for +i
+	
 public:
-	Chanel(const std::string& channelName, size_t maxUsers = 100)
-		: name(channelName), topic(""), maxUsers(maxUsers), currentUsers(0) {}
+	Channel(const std::string& name); 
+	Channel(const Channel& other); 
+	Channel& operator=(const Channel& other); 
+	~Channel();
 
-	bool addMember(int fd) {
-    if (modes.limit && members.size() >= *modes.limit) return false;
-    return members.insert(fd).second;
-	}
-	void removeMember(int fd) {
-		members.erase(fd); operators.erase(fd);
-	}
-	bool isMember(int fd) const { return members.count(fd); }
-	bool isOp(int fd) const     { return operators.count(fd); }
 
-	template<class F>
-	void forEachMember(F f) const { for (int m : members) f(m); }
+	//getters
+	std::string getName() const { return name; }
+	std::string getTopic() const { return topic; }
+	int getMemberCount() const { return members.size(); }
+	std::string getPassKey() const { return passKey; }
+	bool isMember(const std::string& nickname) const  {return members.find(nickname) != members.end();}
+	bool isOperator(const std::string& nickname) const { return operators.find(nickname) != operators.end();}
+	bool Channel::isInvited(const std::string& nickname) const { return invitedUsers.find(nickname) != invitedUsers.end(); }
+
+	bool isTopicRestriction() const { return topicRestriction; }
+	bool isFull() const { return (maxUserLimit > 0 && members.size() >= maxUserLimit); }
+	size_t getUserLimit() const { return maxUserLimit; }
+	std::string getModesString() const;
+
+
+	//setters
+	void setTopic(const std::string& newTopic, Client* setter);
+	void setPassKey(const std::string& key) { passKey = key; }
+	void setInviteOnly(bool set) { inviteOnly = set; }
+	void setTopicRestriction(bool set) { topicRestriction = set; }
+	void setUserLimit(size_t limit) { maxUserLimit = limit; }
+	
+	void setMode(char mode, bool set, const std::string& param);	
+	
+
+	//management
+	bool addMember(Client* client, const std::string& password);
+    bool kickMember(Client* requester, const std::string& targetNickname, const std::string& reason);
+    void addOperator(const std::string& nickname);
+    void removeOperator(const std::string& nickname);
+
+	
+	//invite
+	void inviteUser(const std::string& nickname) { invitedUsers.insert(nickname); }
+	bool isInvited(const std::string& nickname) const { return invitedUsers.count(nickname); }
+
+	//broadcast
+	void broadcast(const std::string& msg, Client* exclude);
+
+	
+	//authorization
+	bool canChangeTopic(const std::string& nickname) const {
+		if (!topicRestriction) return true;
+		return isOperator(nickname);
+	}
+	bool kickMember(Client* requester, const std::string& targetNickname, const std::string& reason);
+	bool canJoin(Client* client, const std::string& password);
 
 };
 #endif // CHANEL_HPP

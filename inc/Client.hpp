@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/28 16:16:37 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/07 17:21:50 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,11 +21,12 @@ class Client {
 private:
 	int fd{-1};
 	bool registered; // whether the client has completed registration
-	std::string nick, user, realname, hostname;
+	std::string nick, user, realname, host;
 	std::string inbox, outbox; // buffers for incoming and outgoing data
 	std::set<std::string> channels; // channels the client has joined
 public:
-	Client(int socketFd): fd(socketFd) {}
+	Client() : fd(-1), registered(false) {}
+	Client(int socketFd): fd(socketFd), registered(false) {}
 	~Client() { if (fd != -1) close(fd); }
 
 	int getFd() const { return fd; }

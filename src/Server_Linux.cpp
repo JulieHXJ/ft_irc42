@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/28 19:07:59 by xhuang            #+#    #+#             */
-/*   Updated: 2025/09/28 19:17:48 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/07 18:46:45 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,9 +22,9 @@
 #include <csignal>          // signal, SIG_IGN
 
 extern volatile sig_atomic_t g_stop; // defined in main
+static const size_t MAX_OUTBUF = 256 * 1024;
 
 namespace {
-    const size_t MAX_OUTBUF = 256 * 1024; // 256 KB per client
 
     void logErr(const char* s){ ::perror(s); }
 
@@ -37,6 +37,17 @@ namespace {
 
     void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
 }
+
+
+Server::~Server(){
+    // close sockets and free clients
+    for (size_t i = 0; i < pollfds.size(); ++i) {
+        ::close(pollfds[i].fd);
+    }
+    // std::map<int, Client*>::iterator it = fd2client.begin();
+    for (; it != fd2client.end(); ++it) delete it->second;
+}
+
 
 /* ============================ helpers =================================== */
 
@@ -145,6 +156,15 @@ void Server::acceptNew(){
         setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN);
 
+        // create client then ad to client list using std::map<int, Client> clients;
+        Client c(connfd);
+        // (optional) fill host string from clientAddr
+        c.host = ::inet_ntoa(clientAddr.sin_addr) ? ::inet_ntoa(clientAddr.sin_addr) : "";
+        client_lst[connfd] = c;
+
+
+        
+
         // init buffers for this client
         inbuff[connfd].clear();
         outbuff[connfd] += ":Server NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹\r\n";
@@ -158,6 +178,20 @@ void Server::acceptNew(){
 void Server::cleanupIndex(size_t i){
     int fd = pollfds[i].fd;
     logClose(fd);
+    
+     // 1) remove from channels
+     channel.removeClientFromAllChannels(fd);
+
+     // 2) remove client record
+     client_lst.erase(fd);
+ 
+     // 3) close & erase io buffers
+
+
+
+
+
+    
     ::close(fd);
 
     inbuff.erase(fd);
@@ -195,9 +229,7 @@ bool Server::handleReadable(size_t i){
         // trim leading whitespace
         while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
 
-        // hook for real command parsing later
-        // handleCommand(fd, line);
-
+        
         if (line == "KILL") {
             ::shutdown(fd, SHUT_RDWR);
             continue;
@@ -205,12 +237,14 @@ bool Server::handleReadable(size_t i){
         if (line == "WHO") {
             std::string reply = "USERS:";
             for (size_t k = 1; k < pollfds.size(); ++k)
-                reply += " fd=" + std::to_string(pollfds[k].fd);// to_string not allowed
+            reply += " fd=" + std::to_string(pollfds[k].fd);// to_string not allowed
             outbuff[fd] += reply + "\r\n";
             pollfds[i].events |= POLLOUT;
             continue;
         }
-
+        
+        handleCmd(fd, line);//todo: cmd functions in servercmd.cpp
+        
         // broadcast to all other clients
         for (size_t j = 1; j < pollfds.size(); ++j) {
             int other = pollfds[j].fd;
