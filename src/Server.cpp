@@ -6,19 +6,11 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/07 19:11:52 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/08 18:56:13 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../inc/Server.hpp"
-#include <fcntl.h>
-#include <unistd.h> // close
-#include <arpa/inet.h> // inet_ntop
-#include <cerrno>
-#include <cstring>
-#include <stdexcept>
-#include <sstream>          // std::ostringstream
-#include <csignal>
 
 extern volatile sig_atomic_t g_stop;// define in main (“There is a variable called g_stop, it’s declared elsewhere, it can change suddenly (signal), and I want to use it here.”)
 

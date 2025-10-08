@@ -6,11 +6,22 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/07 19:20:33 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/08 18:39:48 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../inc/Server.hpp"
+
+//all need removeMember in Channel class
+void Server::handlePart(Client* client, const std::string& channelName);
+void Server::handleQuit(Client* client);
+void Server::cleanupEmptyChannels();
+
+
+
+
+
+
 void Server::parseCmd(const std::string& line, std::string& cmd, std::set<std::string>& args, std::string& trail){
     
 }

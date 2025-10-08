@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:01:40 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/07 18:44:56 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/08 18:57:05 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,6 +24,15 @@
 #include <sys/socket.h> // socket, bind, listen, accept, recv, send
 #include <netinet/in.h> // sockaddr_in
 #include <poll.h>
+
+#include <fcntl.h>
+#include <arpa/inet.h> // inet_ntop
+#include <cerrno>
+#include <cstring>
+#include <stdexcept>
+#include <sstream>          // std::ostringstream
+#include <csignal>
+
 
 #ifndef SERVER_NAME
 # define SERVER_NAME "irc.local"

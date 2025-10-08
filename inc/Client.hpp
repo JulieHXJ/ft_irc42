@@ -6,7 +6,7 @@
 /*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/07 17:21:50 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/08 17:35:52 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,9 +29,12 @@ public:
 	Client(int socketFd): fd(socketFd), registered(false) {}
 	~Client() { if (fd != -1) close(fd); }
 
+	//getters
 	int getFd() const { return fd; }
 	std::string& getInbox() { return inbox; }
 	std::string& getOutbox() { return outbox; }
+	std::string& getNickname() { return nick; }
+	
 
 	void appendToInbox(const std::string& data) { inbox += data; }
 	void appendToOutbox(const std::string& data) { outbox += data; }
@@ -47,6 +50,9 @@ public:
 
 	void joinChannel(std::string const& name) { channels.insert(name); }
 	void leaveChannel(std::string const& name){ channels.erase(name); }
+	void sendMessage(const std::string& message) {
+		outbox += message + "\r\n"; // IRC messages end with CRLF
+	}
 
 };
 
