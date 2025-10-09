@@ -3,20 +3,19 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/08 18:56:43 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/09 22:44:33 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef CHANNEL_HPP
 #define CHANNEL_HPP
 
-
-#include <string>
+#include "../inc/Global.hpp"
+#include "../inc/Log.hpp"
 #include <set>
-#include <map> //C++98-friendly (uses std::map/std::set, no std::unordered_map & std::unordered_set from C++11)
 
 class Client; // forward-declare to avoid circular includes
 
@@ -34,8 +33,8 @@ private:
 	std::set<std::string> invitedUsers; // for +i
 
 	// helpers
-	void sendNamesList_(Client* to);
-	void sendTopicIfAny_(Client* to);
+	void sendNamesList(Client* to);
+	void sendTopic(Client* to);
 	
 public:
 	explicit Channel(const std::string& name);
@@ -72,13 +71,13 @@ public:
 	bool addMember(Client* client, const std::string& password);
 	void removeMember(const std::string& nickname);
     bool kickMember(Client* requester, const std::string& targetNick, const std::string& reason);
-    void addOperator(const std::string& nickname);
-    void removeOperator(const std::string& nickname);
+    bool addOperator(const std::string& nickname);
+    bool removeOperator(const std::string& nickname);
 	void inviteUser(const std::string& nickname) { invitedUsers.insert(nickname); }
 	
 	
 	//broadcast
-	void broadcast(const std::string& msg, Client* exclude);
+	void broadcastInChan(const std::string& msg, Client* exclude);
 	
 	//authorization check
 	bool canChangeTopic(const std::string& nickname) const;

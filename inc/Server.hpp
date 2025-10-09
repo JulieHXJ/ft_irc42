@@ -3,24 +3,20 @@
 /*                                                        :::      ::::::::   */
 /*   Server.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:01:40 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/08 18:57:05 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/09 23:41:30 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
-#pragma once
+#include "../inc/Global.hpp"
 #include "../inc/Client.hpp"
 #include "../inc/Channel.hpp"
 #include <unistd.h> // close
-#include <iostream> // std::cout, std::cerr
-#include <vector>
-#include <map>
-#include <string> // std::memset, std::strlen, etc.
 #include <sys/socket.h> // socket, bind, listen, accept, recv, send
 #include <netinet/in.h> // sockaddr_in
 #include <poll.h>
@@ -33,28 +29,18 @@
 #include <sstream>          // std::ostringstream
 #include <csignal>
 
-
-#ifndef SERVER_NAME
-# define SERVER_NAME "irc.local"
-#endif
-
 class Server {
 private:
 	int listenfd;                           // listening socket
+	std::string password;
 	std::vector<struct pollfd> pollfds;     // [0] is listenfd; others are clients
-	std::map<int, std::string> inbuff;      // fd -> input buffer (move to client?)
-	std::map<int, std::string> outbuff;     // fd -> output buffer (move to client?)
-	
-	std::map<int, Client>              client_lst;   // fd -> Client*
-	std::map<std::string, Client*>     nick2client;
-	std::map<std::string, Channel>     channel_lst; 
+	ClientMap             client_lst;   // fd -> Client*(where includes inbuff and outbuff)
+	ChannelMap             channel_lst; 
 
-	
-	//helper functions
+	//server helper functions
 	void setNonBlocking(int fd);
 	void addPollFd(std::vector<pollfd>& pfds, int fd, short events);
 	void removePollFd(std::vector<pollfd>& pfds, size_t index);
-	bool getLine(std::string& buf, std::string& line);
 
 	//server main loop modules
 	void acceptNew();
@@ -62,33 +48,24 @@ private:
 	bool handleReadable(size_t i);
 	bool handleWritable(size_t i);
 
-	// Command handlers
-	void handleCmd(int fd, const std::string& line);
-    // void handleNick(int fd, const std::string& nick);
-    // void handleUser(int fd, const std::string& user, const std::string& real);
-    // void maybeRegister(Client* c);
+	// Command handlers (defined in Server_cmd.cpp)
+	void handleLine(int fd, const std::string& rawLine);
+	void handlePASS(int fd, const std::string& pass);
 
 	// channel & client helpers
-    Channel& newChannel(const std::string& name);
-    void joinChannel(int fd, const std::string& name, const std::string& key);
-    void partChannel(int fd, const std::string& name, const std::string& reason);
-    void removeClientFromAllChannels(int fd);
-
-	// Send helpers
-    void sendNumeric(int fd, const std::string& code,
-                     const std::string& p1, const std::string& msg);
-	
+	void removeClientFromAllChannels(int fd);
 	
 public:
-	Server(): listenfd(-1){}
-	~Server(){closeFds();}  
-	
-	void serverInit(int port);//setup server socket，listen， add to pollfd list
-	void run(); //main loop: accept, recv, send 
-	void closeFds();
+	Server() : listenfd(-1) {}
+    ~Server();
+    Server(const Server& other);              // 拷贝构造：仅复制配置，不复制打开资源
+    Server& operator=(const Server& rhs); 
 
-	// Send helpers
-    void pushLine(int fd, const std::string& msgCRLF);   // for client: sendMsg
+	void serverInit(int port, std::string password);//setup server socket，listen， add to pollfd list
+	void run(); //main loop: accept, recv, send 
+
+	// privmsg helpers
+    void pushToClient(int fd, const std::string& msg);
 	
 };
 
