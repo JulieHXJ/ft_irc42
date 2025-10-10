@@ -47,8 +47,7 @@ bool Channel::isFull() const {
     return (maxUserLimit > 0 && members.size() >= maxUserLimit);
 }
 
-bool Channel::addMember(Client* client, const std::string& password)
-{
+bool Channel::addMember(Client* client, const std::string& password) {
     if (!canJoin(client, password)) {
         return false;
     }
@@ -62,7 +61,7 @@ bool Channel::addMember(Client* client, const std::string& password)
     if (!topic.empty()) {
         client->sendMessage(":" + std::string(SERVER_NAME) + " 332 " + client->getNickname() + " " + name + " :" + topic);
     }
-    // sendNamesList(client);  do we need to send name list to the joining client?
+    // sendNamesList(client);  //do we need to send name list to the joining client?
     return true;
 }
 
@@ -97,9 +96,49 @@ bool Channel::isInvited(const std::string& nickname) const {
     return invitedUsers.find(nickname) != invitedUsers.end();
 }
 
-// void Channel::broadcast(const std::string &msg, Client* exclude);
+// auto& member: Each iteration gives us a key-value pair:
+// member.first: The nickname (string)
+// member.second: The Client object pointer
+void Channel::broadcast(const std::string &msg, Client* exclude) {
+    for (auto& member : members) {
+        if (member.second != exclude) {
+            try {
+                member.second->sendMessage(msg);
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to send to " << member.first << ": " << e.what() << std::endl;
+            }
+        }
+    }
+}
 
-// void Channel::setMode(char mode, bool set, const std::string& param);
+void Channel::setMode(char mode, bool set, const std::string& param) {
+    switch (mode) {
+        case 'i':
+            inviteOnly = set; break;            
+        case 't':
+            topicRestriction = set; break;
+        case 'k':
+            if (set && param.empty()) { return; }
+            passKey = set ? param : "";
+            break;
+        case 'o':
+            if (param.empty()) { return; }
+            if (!isMember(param)) { return; }
+            if (set) { addOperator(param);
+            } else { removeOperator(param); }
+            break;
+        case 'l':
+            if (set) {
+                if (param.empty()) { return; }
+                int limit = std::atoi(param.c_str());
+                if (limit <= 0) { return; }
+                maxUserLimit = limit;
+            } else { maxUserLimit = 0; }
+            break;
+        default:
+            break;
+    }
+}
 
 std::string Channel::getModesString() const {
     std::string modes = "+";
@@ -110,14 +149,45 @@ std::string Channel::getModesString() const {
     return modes;
 }
 
-// void Channel::setTopic(const std::string& newTopic, Client* setter) { topic = newTopic; }
+void Channel::setTopic(const std::string& newTopic, Client* client) {
+    if (!canChangeTopic(client->getNickname())) {
+        client->sendMessage("482 " + client->getNickname() + " " + name + " :You're not channel operator");
+        return;
+    }
+    topic = newTopic;
+    if (!newTopic.empty()) {
+        broadcast(":" + client->getNickname() + " TOPIC " + name + " :" + newTopic);
+    }
+}
 
-// bool Channel::canChangeTopic(const std::string& nickname) const;
+bool Channel::canChangeTopic(const std::string& nickname) const {
+    if (!topicRestriction) {
+        return true;
+    }
+    return isOperator(nickname);
+}
 
-// bool Channel::kickMember(Client* requester, const std::string& targetNickname, const std::string& reason); -->client->getfd()
+bool Channel::kickMember(Client* client, const std::string& targetNickname, const std::string& reason) {
+    if (!isOperator(client->getNickname())) {
+        client->sendMessage("482 " + client->getNickname() + " " + name + " :You're not channel operator");
+        return false;
+    }
+    if (!isMember(targetNickname)) {
+        client->sendMessage("441 " + client->getNickname() + " " + targetNickname + " " + name + " :They aren't on that channel");
+        return false;
+    }
+    Client* targetClient = members[targetNickname];
+    std::string kickMsg = ":" + client->getNickname() + " KICK " + name + " " + targetNickname;
+    if (!reason.empty()) {
+        kickMsg += " :" + reason;
+    }
+    removeMember(targetNickname);
+    broadcast(kickMsg);
+    targetClient->sendMessage(kickMsg);
+    return true;
+}
 
-bool Channel::canJoin(Client* client, const std::string& password)
-{
+bool Channel::canJoin(Client* client, const std::string& password) {
     if (isMember(client->getNickname())) {
         client->sendMessage("443 " + client->getNickname() + " " + name + " :is already on channel");
         return false;
@@ -137,8 +207,29 @@ bool Channel::canJoin(Client* client, const std::string& password)
     return true;
 }
 
+void Channel::sendNamesList(Client* client) const {
+    std::string namesList;
+    for (auto& member : members) {
+        const std::string& nickname = member.first;
+        
+        if (!namesList.empty()) {
+            namesList += " ";
+        }
+        if (isOperator(nickname)) {
+            namesList += "@";
+        }
+        namesList += nickname;
+    }
+    client->sendMessage(":ircserver 353 " + client->getNickname() + " = " + name + " :" + namesList);
+    client->sendMessage(":ircserver 366 " + client->getNickname() + " " + name + " :End of /NAMES list");
+}
 
 
+// void Channel::sendNamesListToAll() const {
+//     for (auto& member : members) {
+//         sendNamesList(member.second);
+//     }
+// }
 
 //     For TOPIC:
 // setInviteOnly(bool set) { inviteOnly = set; }

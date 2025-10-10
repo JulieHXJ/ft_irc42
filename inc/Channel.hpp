@@ -64,13 +64,14 @@ class Channel {
     	std::string getModesString() const;
     
     	// Topic management
-    	void setTopic(const std::string& newTopic, Client* setter);
+    	void setTopic(const std::string& newTopic, Client* client);
     	bool canChangeTopic(const std::string& nickname) const;
 		
 		//Kick command
-		bool kickMember(Client* requester, const std::string& targetNickname, const std::string& reason);
+		bool kickMember(Client* client, const std::string& targetNickname, const std::string& reason);
     
 		// Validation methods
     	bool canJoin(Client* client, const std::string& password);
+		void Channel::sendNamesList(Client* client) const;
 		// void setOperatorPrivilege(const std::string& nickname, bool isOperator);
 };
