@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Global.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 16:43:33 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/09 23:17:49 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 16:17:24 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,7 +25,7 @@
 
 // ---- Basic Info ----
 #ifndef SERVER_NAME
-# define SERVER_NAME "ircserver"
+# define SERVER_NAME "ircserv"
 #endif
 
 #ifndef DEFAULT_PORT
@@ -41,10 +41,6 @@
 #define MAX_LINE_LEN    512  // per RFC 1459
 #define CRLF            "\r\n"
 
-// ---- Utility Macros ----
-#define LOG_INFO(msg)  std::cout << "[INFO] " << msg << std::endl
-#define LOG_WARN(msg)  std::cerr << "[WARN] " << msg << std::endl
-#define LOG_ERR(msg)   std::cerr << "[ERR]  " << msg << std::endl
 
 // ========================
 //  IRC Numeric Replies (Partial)

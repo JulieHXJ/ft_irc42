@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 00:53:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/09 12:42:37 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 16:42:19 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,12 +28,13 @@ KICK #tea bob :stop spamming\r\n
 PART #tea :gotta run\r\n
 QUIT :Client exiting\r\n
  */
-struct Message {
+struct IRCmessage {
     std::string prefix;  // server or nick!user@host or empty
-    std::string command;
-    std::vector<std::string> params;
+    std::string command;             // NICK, USER, JOIN, etc.
+    std::vector<std::string> params; // Command parameters and trailing
 };
 
-Message parseLine(const std::string &rawLine);
+
+IRCmessage parseLine(const std::string &rawLine);
 
 #endif

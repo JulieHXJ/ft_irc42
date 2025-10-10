@@ -3,74 +3,121 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/09 23:48:32 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 18:46:58 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../inc/Server.hpp"
 #include "../inc/Parser.hpp" // parseLine
 
-void Server::handleLine(int fd, const std::string& rawLine) {
+void Server::handlePASS(Client* c, const std::vector<std::string>& params) {
+    if (params.empty()) {
+        c->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " PASS :Not enough parameters");
+        return;
+    }
+    if (params[0] != password) {
+        c->sendMessage(":" SERVER_NAME " " ERR_PASSWDMISMATCH " " + c.getNickname() + " :Password incorrect");
+
+        // 友好地给客户端时间读取，再关闭
+        c->appendInbuff("Closing connection due to incorrect password.\r\n");// or snedMessage?
+        // 直接清理
+        // 注意：不要在这里立刻 erase poll 索引；交给主循环的 handleWritable 之后或设置一个标志。
+        // 简化起见，直接关闭：
+        ::shutdown(c->getFd(), SHUT_RDWR);
+        return;
+    }
+    c->setPassOk(password);
+}
+
+void Server::handleNICK(Client* c, const std::vector<std::string>& params) {
+    if (params.empty()) {
+        c->sendMessage(":server 431 * :No nickname given");
+        return;
+    }
+    std::string nick = params[0];
+    
+    for (std::map<int, Client*>::iterator it = client_lst.begin(); it != client_lst.end(); ++it) {
+        if (it->second != c && it->second->getNickname() == nick) {
+            client->sendMessage(":server 433 * " + nick + " :Nickname is already in use");
+            return;
+        }
+    }
+    
+    std::string oldnick = c->getNickname();
+    client->setNickname(nick);
+    
+    if (!oldnick.empty()) {
+        client->sendMessage(":" + oldnick + " NICK :" + nick);
+    }
+    
+    if (client->isRegistered() && oldnick.empty()) {
+        sendWelcome(client);
+    }
+}
+
+
+
+void Server::handleUSER(Client* c, const std::vector<std::string>& params) {
+    if (params.size() < 4) {
+        client->sendMessage(":server 461 * USER :Not enough parameters");
+        return;
+    }
+    
+    std::string username = params[0];
+    std::string realname = params[3];
+    
+    client->setUsername(username, realname);
+    
+    if (client->isRegistered()) {
+        sendWelcome(client);
+    }
+}
+
+
+
+
+
+void Server::handleCmd(Client* c, const std::string& Line) {
     //if line is empty , ignore
-    if (rawLine.empty()) return;
+    if (Line.empty()) return;
     // Parse the command and execute appropriate actions
-    Message msg = parseLine(rawLine);
+    IRCmessage msg = parseLine(rawLine);
     if (msg.command.empty()) return;
     std::cout << "Received command from fd=" << fd << ": " << rawLine << "\n";
     
 
-    if (msg.command == "NICK")
-        handleNick(cl, msg);
-    else if (msg.command == "PASS")
-    {
-        handlePASS(fd, msg.params[0]);//PASS <password>
-    }
-    
+    if (msg.command == "PASS")
+        handlePASS(c, msg.params);//PASS <password>
+    else if (msg.command == "NICK")    
+        handleNICK(c, msg.params);
     else if (msg.command == "USER")
-        handleUser(cl, msg);
-    else if (msg.command == "JOIN")
-        handleJoin(cl, msg);
-    else if (msg.command == "PART")
+        handleUSER(c, msg.params);
+    else if (msg.command == "JOIN")    
+        handleJoin(c, msg);
+    else if (msg.command == "PART")    
         handlePart(cl, msg);
-    else if (msg.command == "PRIVMSG")
+    else if (msg.command == "PRIVMSG")    
         handlePrivmsg(cl, msg);
-    else if (msg.command == "QUIT")
+    else if (msg.command == "QUIT")//mode invite and kick    
+    
         handleQuit(cl, msg);
-    else
-        cl.sendMessage(":server 421 " + c.getNickname() + " " + msg.command + " :Unknown command");
-}
-
-void Server::handlePASS(int fd, const std::string& pass) {
-    std::map<int, Client>::iterator it = client_lst.find(fd);
-    if (it == client_lst.end()) return;
-    Client& c = it->second;
-
-    if (c.isRegistered()) {
-        pushToClient(fd, numReply("462", c.getNickname(), ":You may not reregister"));
-        return;
-    }
-    if (pass.empty()) {
-        pushToClient(fd, numReply("461", c.getNickname(), "PASS :Not enough parameters"));
-        return;
-    }
-    if (pass != password) {
-        // 464 ERR_PASSWDMISMATCH
-        pushToClient(fd, numReply("464", c.getNickname(), ":Password incorrect"));
-        // 友好地给客户端时间读取，再关闭
-        c.getOutput() += CRLF;
-        // 直接清理
-        // 注意：不要在这里立刻 erase poll 索引；交给主循环的 handleWritable 之后或设置一个标志。
-        // 简化起见，直接关闭：
-        ::shutdown(fd, SHUT_RDWR);
-        return;
-    }
-    c.setPassOk(true);
-    maybeRegister(c);
-}
-
+    else if (msg.command == "MODE")    
+    {
+        /* code */
+    }    
+    else if (msg.command == "KICK")    
+        handleKick(cl, msg);
+    else if (msg.command == "INVITE")    
+        handleInvite(cl, msg);
+    else if (msg.command == "TOPIC")    
+        handleTopic(cl, msg);
+    
+    else    
+        c.sendMessage(":server 421 " + c.getNickname() + " " + msg.command + " :Unknown command");
+}        
 
 
 

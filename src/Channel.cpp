@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 18:03:47 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/09 22:52:09 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 17:24:56 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,7 +40,6 @@ Channel& Channel::operator=(const Channel& other) {
 }
 
 Channel::~Channel() {
-    // pointers are owned by Server/Client registry, not by Channel
     members.clear();
     operators.clear();
     invitedUsers.clear();
@@ -104,13 +103,14 @@ void Channel::setMode(char mode, bool set, const std::string& param) {
 bool Channel::addMember(Client* client, const std::string& password) {
     if (!client) return false;
     if (!canJoin(client, password)) return false;
+    
     const std::string nick = client->getNickname();
     members[nick] = client;
     invitedUsers.erase(nick);
     if (members.size() == 1u) { operators[nick] = client; }//set first member as operator
 
     // Broadcast JOIN: <nick> JOIN <channel>
-    broadcastInChan(":" + nick + " JOIN " + chan_name, NULL);
+    broadcastInChan(":" + nick + " JOIN " + chan_name, NULL); // :john!johndoe@localhost JOIN #general
     Log::joinEvt(nick, chan_name);
 
     // Send topic and names list to the new member
@@ -120,9 +120,7 @@ bool Channel::addMember(Client* client, const std::string& password) {
         client->sendMessage(":" SERVER_NAME " " RPL_TOPIC " " + nick + " " + chan_name + " :" + chan_topic);
     }
     // Optionally send names list (RPLNAMREPLY/366) later
-
-    // Send names list to the new member (why?)
-    sendNamesList(client);//todo
+    sendNamesList(client);
     
     return true;
 }
@@ -150,13 +148,13 @@ bool Channel::kickMember(Client* requester, const std::string& targetNick, const
     
     // Broadcast KICK: <requester> KICK <channel> <target> : <reason>
     std::string kickMsg = ":" + reqNick + " KICK " + chan_name + " " + targetNick + " :" + (reason.empty() ? "Kicked" : reason);
-    broadcastInChan(kickMsg, NULL);
     Log::kickEvt(reqNick, chan_name, targetNick, reason);
     
     // notify the kicked user
-    if (targetClient) targetClient->sendMessage(kickMsg);
-
+    
     removeMember(targetNick);
+    broadcastInChan(kickMsg, NULL);
+    if (targetClient) targetClient->sendMessage(kickMsg);
     return true;
 }
 
@@ -186,6 +184,17 @@ bool Channel::removeOperator(const std::string& nickname) {
     operators.erase(nickname);
     Log::info("[MODE] -o" + chan_name + ": " + nickname + " is no longer an operator");
     return true;
+}
+
+
+void Channel::inviteUser(const std::string& nickname) {
+    if (nickname.empty()) return;
+    if (isInvited(nickname)) {
+        //warning: already invited
+        return;
+    }
+    members.insert(nickname, NULL); // NULL client pointer, will be set when the user joins
+    invitedUsers.insert(nickname);
 }
 
 /* =========== authorization check ==============*/

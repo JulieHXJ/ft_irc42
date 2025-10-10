@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/09 22:44:33 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 16:04:36 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,17 +24,17 @@ private:
 	std::string chan_name;
 	std::string chan_topic;
 	std::string chan_passkey; // +k mode 
-	bool inviteOnly; // +i mode 
-	bool topicRestriction; // +t mode 
-	size_t maxUserLimit; // +l (0 => unlimited)
+	bool 		inviteOnly; // +i mode 
+	bool 		topicRestriction; // +t mode 
+	size_t 		maxUserLimit; // +l (0 => unlimited)
 
-	std::map<std::string, Client*> members; // nickname -> Client*
-	std::map<std::string, Client*> operators; // nickname -> Client*
-	std::set<std::string> invitedUsers; // for +i
+	std::map<std::string, Client*> 	members; // nickname of all channel members
+	std::map<std::string, Client*> 	operators; // channel operators
+	std::set<std::string> 			invitedUsers; // for +i mode
 
 	// helpers
 	void sendNamesList(Client* to);
-	void sendTopic(Client* to);
+	void sendTopic(Client* to);//todo
 	
 public:
 	explicit Channel(const std::string& name);

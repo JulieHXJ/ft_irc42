@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/09 23:43:33 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 18:26:53 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -57,9 +57,6 @@ Server& Server::operator=(const Server& rhs){
 
     listenfd = -1;
     password = rhs.password;
-
-    // 其余运行态（pollfds / clients / channels）保持空，
-    // 如需启动网络请调用 serverInit(...) 重新创建监听与事件循环。
     return *this;
 }
 
@@ -68,8 +65,7 @@ void Server::setNonBlocking(int fd){
 	int flags = ::fcntl(fd, F_GETFL, 0);
     if (flags == -1) flags = 0;
     if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ")
-                                 + std::strerror(errno));
+        throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ") + std::strerror(errno));
 	}
 }
 
@@ -141,11 +137,7 @@ void Server::serverInit(int port, std::string password){
 	if (listenfd < 0) { 
 		throw std::runtime_error("socket failed");
 	} 
-	
-	//2) allow socket descriptor to be reusable
-	//setsockopt() is used to set options for the socket referred to by the file descriptor sockfd.
-	//Here, it sets the SO_REUSEADDR option, which allows the socket to bind to an address that is already in use.
-	//This is useful for server applications that need to restart and bind to the same port without waiting for the OS to release it.
+	//2) set socket options
 	int yes = 1;
     if (::setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
 		::close(listenfd);
@@ -157,7 +149,6 @@ void Server::serverInit(int port, std::string password){
         throw std::runtime_error(std::string("setsockopt(SO_REUSEPORT): ") + std::strerror(errno));
     }
 	#endif
-	
 	//3) bind
 	sockaddr_in addr; 
 	std::memset(&addr, 0, sizeof(addr)); 
@@ -168,17 +159,14 @@ void Server::serverInit(int port, std::string password){
 		::close(listenfd);
         throw std::runtime_error(std::string("bind failed: ")+ std::strerror(errno));
     }
-	
 	// 4) listen
     if (::listen(listenfd, 64) < 0) {
 		::close(listenfd);
         throw std::runtime_error(std::string("listen failed: ") + std::strerror(errno));
     }
-	
 	setNonBlocking(listenfd);
 	pollfds.clear();
 	addPollFd(pollfds, listenfd, POLLIN);
-	
 	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting clients)\n";
 }
 
@@ -188,13 +176,14 @@ void Server::run(){
 	{
 		if (pollfds.empty()) break; // exit loop if no fds to monitor
 		int n = ::poll(&pollfds[0], pollfds.size(), 500);// 500ms timeout to check g_stop
+		
 		if (n < 0) {
 			if (errno == EINTR) continue; // interrupted by signal, retry
 			throw std::runtime_error(std::string("poll: ") + std::strerror(errno));
 		}
 	
 		//1. accept new connections: create client, add to client_lst
-		acceptNew();
+		acceptNewConnect();
 		
 		//2. handle each client socket， increment i only if not removed
 		for (size_t i = 1; i < pollfds.size();)
@@ -211,7 +200,7 @@ void Server::run(){
 			
 			//2.2 handle readable fds
 			if (!removed && (re & POLLIN)) {
-				removed = handleReadable(i);
+				removed = handleClientRead(i);
 				if (removed) continue;
 			}
 			//2.3 handle writable fds
@@ -228,7 +217,7 @@ void Server::run(){
  * @brief Accept new incoming connections on the listening socket. 
  * Print welcone message and the client info.
  */
-void Server::acceptNew(){
+void Server::acceptNewConnect(){
     if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;//no new connection
 
     for(;;){
@@ -242,14 +231,19 @@ void Server::acceptNew(){
         }
 		setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN);
-		client_lst.insert(std::make_pair(connfd, Client(connfd)));// add to Client list
+		Client* newClient = new Client(connfd);
+		newClient->detectHostname();
+		client_lst[connfd] = newClient;
 
         // send welcome message
-		client_lst[connfd].sendMessage(":" SERVER_NAME RPL_WELCOME " NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹");
+		newClient->sendMessage(":" SERVER_NAME RPL_WELCOME " NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹");
+		newClient->sendMessage(": NOTICE * :*** Looking up your hostname...");
+        newClient->sendMessage(": NOTICE * :*** Found your hostname");
+        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
 
         // enable write for the newly added (it's at the back)
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
-		//put in log
+		//put in server log
         Log::newConnect(connfd, clientAddr);
     }
 }
@@ -258,8 +252,13 @@ void Server::acceptNew(){
  * @brief keep receiving and appending until EAGAIN,
  * then extract lines, process command, generate responses
  */
-bool Server::handleReadable(size_t i){
+bool Server::handleClientRead(size_t i){
 	int fd = pollfds[i].fd;
+
+
+
+
+	
 	std::map<int, Client>::iterator it = client_lst.find(fd);
 	if (it == client_lst.end()) { cleanupIndex(i); return true; }
 	Client& cl = it->second;
@@ -268,25 +267,26 @@ bool Server::handleReadable(size_t i){
 	ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
 	if (r == 0) {
 		//client closed connection
+		Log::closed(fd);
 		cleanupIndex(i);
-		return true; // index was swap-removed; caller must not ++i
+		return true;
 	} else if (r < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) return false; // no data available
 		std::perror("recv");
 		cleanupIndex(i);
 		return true;
 	}
+	cl.appendInbuff(buf);//append received data to client inbuff
 	Log::recvBytes(fd, static_cast<size_t>(r));
-	cl.getInput().append(buf, static_cast<size_t>(r));//append received data to client inbuff
 	
 	// 2) pop a complete line from client inbuff and handle commands
 	std::string Line;
-	while (cl.getLine(Line)) {
-		handleLine(fd, Line); // parser and command handler functions
+	while (cl.extractLine(Line)) {
+		handleCmd(cl, Line); // parse and handle cmds
 	}
 
     // If output is not empty (from WHO/welcome), keep POLLOUT on
-    if (!cl.getOutput().empty()) {
+    if (cl.hasOutput()) {
         pollfds[i].events |= POLLOUT;
 	}
 	return false; // not removed
@@ -294,6 +294,10 @@ bool Server::handleReadable(size_t i){
 
 bool Server::handleWritable(size_t i){
 	int fd = pollfds[i].fd;
+	Client* cl = client_lst[fd]
+
+
+	
 	std::map<int, Client>::iterator it = client_lst.find(fd);
 	if (it == client_lst.end()) {
 		cleanupIndex(i);
@@ -327,7 +331,7 @@ bool Server::handleWritable(size_t i){
 void Server::pushToClient(int fd, const std::string& msg) {
     std::map<int, Client>::iterator it = client_lst.find(fd);
     if (it == client_lst.end()) return;
-   	it->second.getOutput() += msg + CRLF;
+   	it->second.appendInbuff(msg + CRLF);
 
     // turn on POLLOUT
     for (size_t i=0; i<pollfds.size(); ++i) {

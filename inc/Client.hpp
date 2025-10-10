@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/09 23:44:13 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/10 18:06:44 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,19 +14,22 @@
 #define CLIENT_HPP
 
 #include "../inc/Global.hpp"
+#include "../inc/Parser.hpp"
 #include <unistd.h> // close
 #include <set>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 class Client {
 private:
 	int fd;
 	bool pass_ok;
 	bool registered; // whether the client has completed registration
-	std::string nickname, username, host;
+	std::string nickname, username, hostname;
 	std::string inbuff, outbuff; // buffers for incoming and outgoing data
 	std::set<std::string> joinedChannels; // channels the client has joined
 public:
-	Client() : fd(-1), pass_ok(false), registered(false) {}
 	Client(int socketFd): fd(socketFd), pass_ok(false), registered(false) {}
 	~Client() { if (fd != -1) close(fd); }
 
@@ -36,30 +39,29 @@ public:
 	bool isRegistered() const { return registered; }
 	const std::string& getNickname() const { return nickname; }
 	const std::string& getUsername() const { return username; }
-	std::string& getInput() { return inbuff; }//for server to read
-	std::string& getOutput() { return outbuff; }//for server to write
+	const std::string& getHostname() const { return hostname; }
+	bool hasOutput() const { return !outbuff.empty(); }
+    std::vector<std::string> getChannels() const {
+		return joinedChannels.empty() ? std::vector<std::string>() : std::vector<std::string>(joinedChannels.begin(), joinedChannels.end()); 
+	}
 
 	//setters
 	void setFd(int socketFd) { fd = socketFd; }
-	void setPassOk(bool v) { pass_ok = v; }
-	void setRegistered(bool v) { registered = v; }
-	void setNickname(const std::string& nickname) { this->nickname = nickname; }
+	void setPassOk(const std::string& password) { (void)password; this->pass_ok = true; }
+	void setNickname(const std::string& nick) { this->nickname = nick; }
 	void setUsername(const std::string& username) { this->username = username; }
-
+	void setRegistered();
 	
-	void sendMessage(const std::string& message) { outbuff += message + CRLF;}
+	// message methods
+	void detectHostname();
+	void appendInbuff(const std::string& data) { inbuff += data; }
+    bool extractLine(std::string& line);
+	void sendMessage(const std::string& message);//add CRLF, queue to outbuff, enable POLLOUT in server, check buffer 
 	
-	//pop a complete lines from client inbuff without \r\n
-    bool getLine(std::string& line){
-		std::string::size_type pos = inbuff.find(CRLF);
-		if (pos == std::string::npos) return false;
-		line = inbuff.substr(0, pos);//pop out the line without \r\n
-		inbuff.erase(0, pos + 2);//remove the line with \r\n
-		return true;
-	}
-
-	void clearInbox() { inbuff.clear(); }
-	void clearOutbox() { outbuff.clear(); }
+	// Channel management
+    void joinChannel(const std::string& channel);
+    void leaveChannel(const std::string& channel);
+    bool isInChannel(const std::string& channel) const;
 
 };
 
