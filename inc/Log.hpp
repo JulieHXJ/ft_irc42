@@ -6,7 +6,7 @@
 /*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 17:15:51 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/09 23:17:12 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/14 18:02:53 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,19 +45,6 @@ inline void error(const std::string& m) { std::cerr << C_RED << "[ERR  "  << now
 inline void dbg  (const std::string& m) { std::cout  << C_CYN << "[DBG  "  << nowStr() << "] " << m << C_RESET << "\n"; }
 
 // ---- Specific events ----
-
-
-// namespace {
-
-// 	void logNew(int fd, const sockaddr_in& a){
-//         char ip[INET_ADDRSTRLEN] = {0};
-//         ::inet_ntop(AF_INET, &a.sin_addr, ip, sizeof(ip));
-//         std::cout << "[+] New connection from " << ip << ":" << ntohs(a.sin_port)
-//                   << ", fd=" << fd << "\n";
-//     }
-	
-// 	void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
-// }
 inline void newConnect(int fd, const sockaddr_in& a) {
     char ip[INET_ADDRSTRLEN] = {0};
     ::inet_ntop(AF_INET, &a.sin_addr, ip, sizeof(ip));

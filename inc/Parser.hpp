@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 00:53:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/10 16:42:19 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 22:05:01 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,11 +21,12 @@
 NICK alice\r\n
 USER alice 0 * :Alice Liddell\r\n
 JOIN #tea\r\n
-PRIVMSG #tea :hello everyone\r\n
 TOPIC #tea :Tea time at 5pm\r\n
-MODE #tea +it\r\n
-KICK #tea bob :stop spamming\r\n
 PART #tea :gotta run\r\n
+INVITE #tea bob\r\n
+KICK #tea bob :stop spamming\r\n
+PRIVMSG #tea :hello everyone\r\n
+MODE #tea +it\r\n
 QUIT :Client exiting\r\n
  */
 struct IRCmessage {

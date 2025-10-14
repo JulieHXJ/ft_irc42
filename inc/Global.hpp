@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Global.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 16:43:33 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/10 16:17:24 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 22:09:45 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,7 +38,7 @@
 #define MAX_NICK_LEN    32
 #define MAX_USER_LEN    32
 #define MAX_TOPIC_LEN   256
-#define MAX_LINE_LEN    512  // per RFC 1459
+#define MAX_LINE_LEN    510  // per RFC 1459
 #define CRLF            "\r\n"
 
 
@@ -56,12 +56,14 @@
 #define RPL_TOPIC          "332"
 
 // Names
+#define RPL_INVITING	  "341"
 #define RPL_NAMREPLY       "353"
 #define RPL_ENDOFNAMES     "366"
 
 // Errors & replies
 #define ERR_NOSUCHNICK     "401"
 #define ERR_NOSUCHCHANNEL  "403"
+#define ERR_CANNOTSENDTOCHAN "404" 
 #define ERR_NONICKNAMEGIVEN "431"
 #define ERR_NICKNAMEINUSE  "433"
 #define ERR_NOTREGISTERED  "451"
@@ -72,6 +74,7 @@
 
 // --- join / part / kick ---
 #define ERR_USERNOTINCHANNEL "441"
+#define ERR_NOTONCHANNEL     "442"
 #define ERR_USERONCHANNEL  "443"
 #define ERR_CHANNELISFULL  "471"
 #define ERR_INVITEONLYCHAN "473"
@@ -91,6 +94,6 @@
 #include <iostream>
 
 typedef std::map<std::string, class Channel*> ChannelMap;
-typedef std::map<int, class Client>           ClientMap;
+typedef std::map<int, class Client*>           ClientMap;
 
 #endif // COMMON_HPP

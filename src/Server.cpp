@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/10 18:26:53 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 20:31:51 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,21 +15,6 @@
 
 extern volatile sig_atomic_t g_stop;// define in main (“There is a variable called g_stop, it’s declared elsewhere, it can change suddenly (signal), and I want to use it here.”)
 
-
-Server::~Server(){
-	for (size_t i = 0; i < pollfds.size(); ++i) {
-		::close(pollfds[i].fd);
-    }
-    pollfds.clear();
-	std::map<std::string, Channel*>::iterator it = channel_lst.begin();
-	while (it != channel_lst.end()) {
-		Channel* toDelete = it->second;
-		std::map<std::string, Channel*>::iterator er = it++;
-		channel_lst.erase(er);
-		delete toDelete;
-	}
-	client_lst.clear();//why at last?
-}
 
 Server::Server(const Server& other) {
 	// Copy configuration, but not open resources
@@ -40,16 +25,35 @@ Server::Server(const Server& other) {
 	this->channel_lst.clear();
 }
 
+Server::~Server(){
+	for (size_t i = 0; i < pollfds.size(); ++i) {
+		::close(pollfds[i].fd);
+	}
+	pollfds.clear();
+
+	 // delete all channels
+	for (ChannelMap::iterator it = channel_lst.begin(); it != channel_lst.end(); ++it) {
+		delete it->second;
+	}
+	channel_lst.clear();
+
+	// delete all clients
+	for (ClientMap::iterator it = client_lst.begin(); it != client_lst.end(); ++it) {
+		delete it->second;
+	}
+	client_lst.clear();//why at last?
+}
+
 Server& Server::operator=(const Server& rhs){
     if (this == &rhs) return *this;
     for (size_t i = 0; i < pollfds.size(); ++i) {
         if (pollfds[i].fd >= 0) ::close(pollfds[i].fd);
     }
     pollfds.clear();
-    std::map<std::string, Channel*>::iterator it = channel_lst.begin();
+    ChannelMap::iterator it = channel_lst.begin();
     while (it != channel_lst.end()) {
         Channel* toDelete = it->second;
-        std::map<std::string, Channel*>::iterator er = it++;
+        ChannelMap::iterator er = it++;
         channel_lst.erase(er);
         delete toDelete;
     }
@@ -78,6 +82,7 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
 	pfd.events = events;
 	pfd.revents = 0;
 	pfds.push_back(pfd);// add to the end
+	fd_index[sckfd] = pfds.size() - 1; // map fd to its index in pollfds
 }
 
 /**
@@ -86,8 +91,15 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
  */
 void Server::removePollFd(std::vector<pollfd>& pfds, size_t index) {
 	if (pfds.empty() || index >= pfds.size()) return;
-    pfds[index] = pfds[ pfds.size() - 1 ];  // copy last element into index
-    pfds.pop_back();   
+
+	const int removed_fd = pfds[index].fd;
+    if (index != pfds.size() - 1) {
+        const int last = pfds[pfds.size() - 1].fd;
+        pfds[index] = pfds[pfds.size() - 1];
+        fd_index[last] = index;
+    }
+	pfds.pop_back();
+	fd_index.erase(removed_fd); // remove the erased fd from map
 }
 
 
@@ -96,36 +108,39 @@ void Server::removePollFd(std::vector<pollfd>& pfds, size_t index) {
  */
 void Server::cleanupIndex(size_t i){
     if (i >= pollfds.size()) return;
-    int fd = pollfds[i].fd;
+    const int fd = pollfds[i].fd;
 
-	//remove from pollfd_list, all channels and client list
-	removePollFd(pollfds, i);
 	removeClientFromAllChannels(fd);
-	client_lst.erase(fd);
+    ClientMap::iterator it = client_lst.find(fd);
+    if (it != client_lst.end()) {
+        delete it->second;
+        client_lst.erase(it);
+    }
+	
+	removePollFd(pollfds, i);
 	Log::closed(fd);
-	// finally close the socket
 	::close(fd);
 }
 
 void Server::removeClientFromAllChannels(int fd) {
-	std::map<int, Client>::iterator client_it = client_lst.find(fd);
-	if (client_it == client_lst.end()) return;
-	Client& c = client_it->second;
-	const std::string nick = c.getNickname();
-	std::map<std::string, Channel*>::iterator it = channel_lst.begin(); 
-	while (it != channel_lst.end()) {
-		Channel* channel = it->second;
-		if (channel->isMember(nick)) {
+	ClientMap::iterator cit = client_lst.find(fd);
+	if (cit == client_lst.end()) return;
+	Client* c = cit->second;
+	const std::string nick = c ? c->getNickname() : "";
+	
+	for (ChannelMap::iterator chIt = channel_lst.begin(); chIt != channel_lst.end()) {
+		Channel* channel = chIt->second;
+		if (channel && !nick.empty() && channel->isMember(nick)) {
 			channel->broadcastInChan(":" + nick + " QUIT :Client disconnected", 0);
 			channel->removeMember(nick);
 		}
 		//delete empty channel
-		if (channel->getMemberCount() == 0) {
+		if (channel && channel->getMemberCount() == 0) {
 			Channel* toDelete = channel;
-			std::map<std::string, Channel*>::iterator er = it++;
+			ChannelMap::iterator er = chIt++;
 			channel_lst.erase(er);
 			delete toDelete;
-		} else { ++it; }
+		} else { ++chIt; }
 	}
 }
 
@@ -231,18 +246,18 @@ void Server::acceptNewConnect(){
         }
 		setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN);
+		
 		Client* newClient = new Client(connfd);
 		newClient->detectHostname();
 		client_lst[connfd] = newClient;
 
         // send welcome message
-		newClient->sendMessage(":" SERVER_NAME RPL_WELCOME " NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹");
-		newClient->sendMessage(": NOTICE * :*** Looking up your hostname...");
-        newClient->sendMessage(": NOTICE * :*** Found your hostname");
+		sendWelcome(newClient);
         newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
 
         // enable write for the newly added (it's at the back)
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
+		
 		//put in server log
         Log::newConnect(connfd, clientAddr);
     }
@@ -254,14 +269,9 @@ void Server::acceptNewConnect(){
  */
 bool Server::handleClientRead(size_t i){
 	int fd = pollfds[i].fd;
-
-
-
-
-	
-	std::map<int, Client>::iterator it = client_lst.find(fd);
+	ClientMap::iterator it = client_lst.find(fd);
 	if (it == client_lst.end()) { cleanupIndex(i); return true; }
-	Client& cl = it->second;
+	Client* cl = it->second;
 
     char buf[4096];
 	ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
@@ -276,17 +286,17 @@ bool Server::handleClientRead(size_t i){
 		cleanupIndex(i);
 		return true;
 	}
-	cl.appendInbuff(buf);//append received data to client inbuff
+	cl->appendInbuff(buf);//append received data to client inbuff
 	Log::recvBytes(fd, static_cast<size_t>(r));
 	
 	// 2) pop a complete line from client inbuff and handle commands
 	std::string Line;
-	while (cl.extractLine(Line)) {
+	while (cl->extractLine(Line)) {
 		handleCmd(cl, Line); // parse and handle cmds
 	}
 
     // If output is not empty (from WHO/welcome), keep POLLOUT on
-    if (cl.hasOutput()) {
+    if (cl->hasOutput()) {
         pollfds[i].events |= POLLOUT;
 	}
 	return false; // not removed
@@ -294,17 +304,13 @@ bool Server::handleClientRead(size_t i){
 
 bool Server::handleWritable(size_t i){
 	int fd = pollfds[i].fd;
-	Client* cl = client_lst[fd]
-
-
-	
-	std::map<int, Client>::iterator it = client_lst.find(fd);
+	ClientMap::iterator it = client_lst.find(fd);
 	if (it == client_lst.end()) {
 		cleanupIndex(i);
 		return true;//index is removed
 	}
-	
-	std::string &ob = it->second.getOutput();
+	Client* cl = it->second;
+	std::string &ob = cl->getOutput();
 	if (ob.empty()){
 		pollfds[i].events &= ~POLLOUT; // only close POLLOUT
 		return false;
@@ -329,15 +335,32 @@ bool Server::handleWritable(size_t i){
  * @brief Append a message (with CRLF) to the client's output buffer and enable POLLOUT.
  */
 void Server::pushToClient(int fd, const std::string& msg) {
-    std::map<int, Client>::iterator it = client_lst.find(fd);
-    if (it == client_lst.end()) return;
-   	it->second.appendInbuff(msg + CRLF);
-
-    // turn on POLLOUT
-    for (size_t i=0; i<pollfds.size(); ++i) {
+    ClientMap::iterator it = client_lst.find(fd);
+    if (it == client_lst.end()) {
+		Log::warn("pushToClient: fd not found: " + std::to_string(fd));
+		return;
+	}
+	Client* cl = it->second;
+   	cl->sendMessage(msg);
+    // turn on POLLOUT change to fd_index
+    for (size_t i = 0; i < pollfds.size(); ++i) {
         if (pollfds[i].fd == fd) {
             pollfds[i].events |= POLLOUT;
             break;
         }
     }
+}
+
+void Server::pushToMany(const std::vector<int>& fds, const std::string& msg) {
+    for (size_t k=0; k<fds.size(); ++k) pushToClient(fds[k], msg);
+}
+
+
+void Server::sendWelcome(Client* c) {
+    if (!c) return;
+    const std::string nick = c->getNickname().empty() ? "*" : c->getNickname();
+    c->sendMessage(":" SERVER_NAME " " RPL_WELCOME  " " + nick + " :Welcome to " SERVER_NAME ", " + nick);
+    c->sendMessage(":" SERVER_NAME " " RPL_YOURHOST " " + nick + " :Your host is " SERVER_NAME);
+    c->sendMessage(":" SERVER_NAME " " RPL_CREATED  " " + nick + " :This server was created just now");
+    c->sendMessage(":" SERVER_NAME " " RPL_MYINFO   " " + nick + " " SERVER_NAME " v0.1 o itkol");
 }

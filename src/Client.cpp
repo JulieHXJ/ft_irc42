@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/10 16:59:35 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/10 18:02:10 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 17:58:01 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,22 +28,6 @@ bool Client::extractLine(std::string& line){
     return true;
 }
 
-std::vector<std::string> Client::extractMessages() {
-    std::vector<std::string> messages;
-    size_t pos = 0;
-
-    // Accept both LF and CRLF as line terminators; strip optional CR
-    while ((pos = inbuff.find('\n')) != std::string::npos) {
-        std::string line = inbuff.substr(0, pos);
-        if (!line.empty() && line[line.size() - 1] == '\r')
-            line.erase(line.size() - 1);
-        messages.push_back(line);
-        inbuff.erase(0, pos + 1);
-    }
-
-    return messages;
-}
-
 void Client::detectHostname() {
     struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
@@ -55,19 +39,47 @@ void Client::detectHostname() {
     }
 }
 
-
+//to do
 void Client::sendMessage(const std::string& message) {
     if (message.empty()) return;
     if (outbuff.size() + message.size() + 2 > MAX_LINE_LEN) {
         std::cerr << "Warning: Output buffer overflow for client fd=" << fd << ". Message dropped.\n";
         return;
     }
-    outbuff += message + CRLF;
+    outbuff += message;
+    outbuff += CRLF;
 
-    ssize_t sent = send(fd, outbuff.c_str(), outbuff.length(), MSG_DONTWAIT);
-    if (sent > 0) {
-        outbuff.erase(0, sent);
-        return outbuff.empty();
+    // ssize_t sent = send(fd, outbuff.c_str(), outbuff.length(), MSG_DONTWAIT);
+    // if (sent > 0) {
+    //     outbuff.erase(0, sent);
+    //     return outbuff.empty();
+    // }
+}
+
+
+// ========== Channel Management Methods ==========
+size_t Client::findChannelIndex(const std::string& channel) const {
+    for (size_t i = 0; i < joinedChannels.size(); ++i) {
+        if (joinedChannels[i] == channel) return i;
+    }
+    return static_cast<size_t>(-1); // npos
+}
+
+void Client::joinChannel(const std::string& channel) {
+    if (channel.empty()) return;
+    if (findChannelIndex(channel) == static_cast<size_t>(-1)) {
+        joinedChannels.push_back(channel); 
     }
 }
 
+void Client::leaveChannel(const std::string& channel) {
+    if (channel.empty()) return;
+    size_t idx = findChannelIndex(channel);
+    if (idx != static_cast<size_t>(-1)) {
+        joinedChannels.erase(joinedChannels.begin() + static_cast<long>(idx));
+    }
+}
+
+bool Client::isInChannel(const std::string& channel) const {
+    return findChannelIndex(channel) != static_cast<size_t>(-1);
+}

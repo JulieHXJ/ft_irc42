@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/10 16:04:36 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 22:33:53 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,10 +32,6 @@ private:
 	std::map<std::string, Client*> 	operators; // channel operators
 	std::set<std::string> 			invitedUsers; // for +i mode
 
-	// helpers
-	void sendNamesList(Client* to);
-	void sendTopic(Client* to);//todo
-	
 public:
 	explicit Channel(const std::string& name);
 	Channel(const Channel& other); 
@@ -73,11 +69,14 @@ public:
     bool kickMember(Client* requester, const std::string& targetNick, const std::string& reason);
     bool addOperator(const std::string& nickname);
     bool removeOperator(const std::string& nickname);
-	void inviteUser(const std::string& nickname) { invitedUsers.insert(nickname); }
+	bool inviteUser(const std::string& nickname);
 	
 	
 	//broadcast
 	void broadcastInChan(const std::string& msg, Client* exclude);
+	
+	void sendNamesList(Client* to);
+	void sendTopic(Client* to);//todo
 	
 	//authorization check
 	bool canChangeTopic(const std::string& nickname) const;

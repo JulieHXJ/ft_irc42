@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/10 18:06:44 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 17:54:49 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,11 +16,11 @@
 #include "../inc/Global.hpp"
 #include "../inc/Parser.hpp"
 #include <unistd.h> // close
-#include <set>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+class Server; // forward declare
 class Client {
 private:
 	int fd;
@@ -28,10 +28,17 @@ private:
 	bool registered; // whether the client has completed registration
 	std::string nickname, username, hostname;
 	std::string inbuff, outbuff; // buffers for incoming and outgoing data
-	std::set<std::string> joinedChannels; // channels the client has joined
+	std::vector<std::string> joinedChannels; // channels the client has joined
+
+	// avoiding fd 被多次 close）
+    Client(const Client &);
+    Client &operator=(const Client &);
+	// 查找频道名在 vector 中的下标；找不到返回 npos
+    size_t findChannelIndex(const std::string& channel) const;
+
 public:
-	Client(int socketFd): fd(socketFd), pass_ok(false), registered(false) {}
-	~Client() { if (fd != -1) close(fd); }
+	explicit Client(int socketFd): fd(socketFd), pass_ok(false), registered(false) {}
+	~Client() { if (fd != -1) ::close(fd); }
 
 	//getters
 	int getFd() const { return fd; }
@@ -45,6 +52,9 @@ public:
 		return joinedChannels.empty() ? std::vector<std::string>() : std::vector<std::string>(joinedChannels.begin(), joinedChannels.end()); 
 	}
 
+	 // 让 Server::handleWritable 取到可变的输出缓冲
+    std::string& getOutput() { return outbuff; }//why?
+
 	//setters
 	void setFd(int socketFd) { fd = socketFd; }
 	void setPassOk(const std::string& password) { (void)password; this->pass_ok = true; }
@@ -52,7 +62,7 @@ public:
 	void setUsername(const std::string& username) { this->username = username; }
 	void setRegistered();
 	
-	// message methods
+	// I/P helpers
 	void detectHostname();
 	void appendInbuff(const std::string& data) { inbuff += data; }
     bool extractLine(std::string& line);

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 18:03:47 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/10 17:24:56 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/14 22:41:37 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,7 +56,7 @@ void Channel::setTopic(const std::string& newTopic, Client* setter) {
     chan_topic = newTopic;
 
     // Broadcast TOPIC :<nick> TOPIC <channel> : <topic>
-    broadcastInChan(":" + nick + "  TOPIC " + chan_name + " : " + chan_topic, NULL);
+    broadcastInChan(":" + nick + " TOPIC " + chan_name + " : " + chan_topic, NULL);
     Log::topicEvt(nick, chan_name, newTopic);
 }
 
@@ -121,7 +121,6 @@ bool Channel::addMember(Client* client, const std::string& password) {
     }
     // Optionally send names list (RPLNAMREPLY/366) later
     sendNamesList(client);
-    
     return true;
 }
 
@@ -187,14 +186,14 @@ bool Channel::removeOperator(const std::string& nickname) {
 }
 
 
-void Channel::inviteUser(const std::string& nickname) {
-    if (nickname.empty()) return;
+bool Channel::inviteUser(const std::string& nickname) {
+    if (nickname.empty()) return false;
     if (isInvited(nickname)) {
-        //warning: already invited
-        return;
+        Log::warn("[INVITE] " + nickname + " is already invited to " + chan_name);
+        return false;
     }
-    members.insert(nickname, NULL); // NULL client pointer, will be set when the user joins
     invitedUsers.insert(nickname);
+    return true;   
 }
 
 /* =========== authorization check ==============*/
