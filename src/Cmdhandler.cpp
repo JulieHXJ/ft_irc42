@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/14 22:40:49 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/15 18:22:11 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,19 +15,24 @@
 
 void Server::handlePass(Client* c, const std::vector<std::string>& params) {
     if (!c) return;
-    if (c->isRegistered()) { c->sendMessage(":" SERVER_NAME " " ERR_ALREADYREGISTRED " " + c->getNickname() + " :You may not reregister"); return; }
-    if (params.empty()) { c->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " * PASS :Not enough parameters"); return; }
-    
-    if (params[0] != password) {
-        c->sendMessage(":" SERVER_NAME " " ERR_PASSWDMISMATCH " * :Password incorrect");
-        // 友好地给客户端时间读取，再关闭
-        // c->appendInbuff("Closing connection due to incorrect password.\r\n");// or snedMessage?
-        ::shutdown(c->getFd(), SHUT_RDWR);
+    if (c->isRegistered()) {
+        c->sendMessage(":" SERVER_NAME " " ERR_ALREADYREGISTRED " " + c->getNickname() + " :You may not reregister");
         return;
     }
+    if (params.empty()) { c->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " * PASS :Not enough parameters"); return; }
+    
+    if (!password.empty() && params[0] != password) {
+        c->sendMessage(":" SERVER_NAME " " ERR_PASSWDMISMATCH " * :Password incorrect");
+        c->markForClose();// shutdown the client (optional but usual)
+        return;
+    }
+    Log::info ("PASS ok fd=" + std::to_string(c->getFd()));
     c->setPassOk(password);
-    c->setRegistered();
-    if (c->isRegistered()) { sendWelcome(c); }
+    if (c->isPassOk() && !c->getNickname().empty() && !c->getUsername().empty() && !c->isRegistered()) {
+        c->setRegistered();
+        sendWelcome(c);
+        Log::info ("Client fd=" + std::to_string(c->getFd()) + " has completed registration.");
+    }
 }
 
 void Server::handleNick(Client* c, const std::vector<std::string>& params) {
@@ -42,16 +47,16 @@ void Server::handleNick(Client* c, const std::vector<std::string>& params) {
             return;
         }
     }
-
     const std::string oldnick = c->getNickname();
     c->setNickname(nick);
     if (!oldnick.empty() && oldnick != nick) {
         // for each channel: ch->broadcast(...) if needed
         c->sendMessage(":" + oldnick + " NICK :" + nick);
     }
-    c->setRegistered();
-    if (c->isRegistered() && oldnick.empty()) {
+    if (c->isPassOk() && !c->getNickname().empty() && !c->getUsername().empty() && !c->isRegistered()) {
+        c->setRegistered();
         sendWelcome(c);
+        Log::info ("Client fd=" + std::to_string(c->getFd()) + " has completed registration.");
     }
 }
 
@@ -65,8 +70,12 @@ void Server::handleUser(Client* c, const std::vector<std::string>& params) {
     }
     const std::string username = params[0];
     c->setUsername(username);
-    c->setRegistered();
-    if (c->isRegistered()) { sendWelcome(c);}
+    
+    if (c->isPassOk() && !c->getNickname().empty() && !c->getUsername().empty() && !c->isRegistered()) {
+        c->setRegistered();
+        sendWelcome(c);
+        Log::info ("Client fd=" + std::to_string(c->getFd()) + " has completed registration.");
+    }
 }
 
 //JOIN #tea\r\n
@@ -126,15 +135,16 @@ void Server::handleTopic(Client* client, const std::vector<std::string>& params)
     if (!client->isRegistered()) { client->sendMessage(":" SERVER_NAME " " ERR_NOTREGISTERED " * :You have not registered"); return; }
     if (params.size() < 1) { client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " TOPIC :Not enough parameters"); return; }
     std::string chan = params[0];
+    
     ChannelMap::iterator it = channel_lst.find(chan);
     if (it == channel_lst.end()) { client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHCHANNEL " " + client->getNickname() + " " + chan + " :No such channel"); return; }
-    
     Channel* c = it->second;
     if (params.size() == 1) {
         c->sendTopic(client);
     } else {
         c->setTopic(params[1], client); 
     }
+    
 }
 
 //KICK #tea bob :spamming\r\n
@@ -169,6 +179,7 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
     char mode = params[1][1];
     // Minimal stub; real mode handling requires parsing and Channel setters
     (void)params; // avoid unused parameter warning under -Werror
+    (void)mode;
     client->sendMessage(":server 324 " + client->getNickname() + " :modes not implemented");
 }
 
@@ -180,6 +191,9 @@ void Server::handleInvite(Client* client, const std::vector<std::string>& params
 
     std::string nick = params[0];
     std::string chan = params[1];
+
+
+    //find the channel
     ChannelMap::iterator it = channel_lst.find(chan);
     if (it == channel_lst.end()) { client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHCHANNEL " " + client->getNickname() + " " + chan + " :No such channel"); return; }
     Channel* c = it->second;
@@ -191,6 +205,8 @@ void Server::handleInvite(Client* client, const std::vector<std::string>& params
         client->sendMessage(":" SERVER_NAME " " ERR_CHANOPRIVSNEEDED " " + client->getNickname() + " " + chan + " :You're not channel operator");
         return;
     }
+
+    //find client by nick
     Client* target = findClientByNick(nick);
     if (!target) { client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHNICK " " + client->getNickname() + " " + nick + " :No such nick"); return; }
     if(!c->inviteUser(nick)) {
@@ -238,45 +254,46 @@ void Server::handlePrivmsg(Client* client, const std::vector<std::string>& param
 
 
 
-// QUIT :<message>
-void Server::handleQuit(Client* c, const std::string& msg){
-    if (!c) return;
-    const std::string nick = c->getNickname();
-    std::map<std::string, Channel*>::iterator it = channel_lst.begin();
+// // QUIT :<message>
+// void Server::handleQuit(Client* client, const std::vector<std::string>& params){
+//     if (!c) return;
+//     const std::string nick = c->getNickname();
+//     std::map<std::string, Channel*>::iterator it = channel_lst.begin();
 
-    while (it != channel_lst.end()) {
-        Channel* ch = it->second;
-        if (ch->isMember(nick)) {
-            ch->broadcastInChan(":" + nick + " QUIT :" + (msg.empty() ? "Quit" : msg), 0);
-            ch->removeMember(nick);
-            // possibly delete empty channel
-            if (ch->getMemberCount() == 0) {
-                cleanupEmptyChannels();
-                continue;
-            }
-        }
-        ++it;
-    }
-}
+//     while (it != channel_lst.end()) {
+//         Channel* ch = it->second;
+//         if (ch->isMember(nick)) {
+//             ch->broadcastInChan(":" + nick + " QUIT :" + (msg.empty() ? "Quit" : msg), 0);
+//             ch->removeMember(nick);
+//             // possibly delete empty channel
+//             if (ch->getMemberCount() == 0) {
+//                 cleanupEmptyChannels();
+//                 continue;
+//             }
+//         }
+//         ++it;
+//     }
+// }
 
-void Server::cleanupEmptyChannels(){
-    std::map<std::string, Channel*>::iterator it = channel_lst.begin();
-    while (it != channel_lst.end()) {
-        Channel* ch = it->second;
-        if (ch->getMemberCount() == 0) {
-            Channel* toDelete = ch;
-            std::map<std::string, Channel*>::iterator eraseIt = it++;
-            channel_lst.erase(eraseIt);
-            delete toDelete;
-        } else {
-            ++it;
-        }
-    }
-}
+// void Server::cleanupEmptyChannels(){
+//     std::map<std::string, Channel*>::iterator it = channel_lst.begin();
+//     while (it != channel_lst.end()) {
+//         Channel* ch = it->second;
+//         if (ch->getMemberCount() == 0) {
+//             Channel* toDelete = ch;
+//             std::map<std::string, Channel*>::iterator eraseIt = it++;
+//             channel_lst.erase(eraseIt);
+//             delete toDelete;
+//         } else {
+//             ++it;
+//         }
+//     }
+// }
 
 
 
 void Server::handleCmd(Client* c, const std::string& line) {
+    printf("inside cmd handler\n");
     if (!c || line.empty()) return;
     // Parse the command and execute appropriate actions
     IRCmessage msg = parseLine(line);
@@ -285,21 +302,22 @@ void Server::handleCmd(Client* c, const std::string& line) {
     std::cout << "fd=" << c->getFd() << " CMD: " << msg.command << " ("
               << (msg.params.empty() ? "" : msg.params[0]) << " ...)\n";
 
-    if (msg.command == "PASS")  handlePass(c, msg.params);//PASS <password>
+    if (msg.command == "PASS")  {
+        printf("handling PASS\n");
+        handlePass(c, msg.params);//PASS <password>
+    }
     else if (msg.command == "NICK") handleNick(c, msg.params);
     else if (msg.command == "USER") handleUser(c, msg.params);
     else if (msg.command == "JOIN")  handleJoin(c, msg.params);
     else if (msg.command == "PART")    handlePart(c, msg.params);
-    else if (msg.command == "PRIVMSG")    
-        handlePrivmsg(c, msg.params);
-    else if (msg.command == "QUIT")//mode invite and kick
-        handleQuit(c, msg.params);
-    else if (msg.command == "MODE")
-    {
-    
-    }    
+    else if (msg.command == "PRIVMSG") handlePrivmsg(c, msg.params);
+    else if (msg.command == "QUIT")  {
+        // handleQuit(c, msg.params); //todo
+        std::cout << "Client fd=" << c->getFd() << " requested QUIT. Closing connection.\n";
+    }
+    else if (msg.command == "MODE")   handleMode(c, msg.params);  
     else if (msg.command == "KICK")  handleKick(c, msg.params);
-    else if (msg.command == "INVITE")  handleInvite(c, msg.params);//todo
+    else if (msg.command == "INVITE")  handleInvite(c, msg.params);
     else if (msg.command == "TOPIC")   handleTopic(c, msg.params);
     else
         c->sendMessage(":" SERVER_NAME " " ERR_UNKNOWNCOMMAND " " + c->getNickname() + " " + msg.command + " :Unknown command");

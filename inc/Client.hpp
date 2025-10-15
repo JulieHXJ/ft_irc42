@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/14 17:54:49 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/15 17:36:09 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,7 +33,6 @@ private:
 	// avoiding fd 被多次 close）
     Client(const Client &);
     Client &operator=(const Client &);
-	// 查找频道名在 vector 中的下标；找不到返回 npos
     size_t findChannelIndex(const std::string& channel) const;
 
 public:
@@ -42,7 +41,7 @@ public:
 
 	//getters
 	int getFd() const { return fd; }
-	bool isPassOk() const { return pass_ok; }
+	bool isPassOk() const {return pass_ok; }
 	bool isRegistered() const { return registered; }
 	const std::string& getNickname() const { return nickname; }
 	const std::string& getUsername() const { return username; }
@@ -51,9 +50,7 @@ public:
     std::vector<std::string> getChannels() const {
 		return joinedChannels.empty() ? std::vector<std::string>() : std::vector<std::string>(joinedChannels.begin(), joinedChannels.end()); 
 	}
-
-	 // 让 Server::handleWritable 取到可变的输出缓冲
-    std::string& getOutput() { return outbuff; }//why?
+    std::string& getOutput() { return outbuff; }
 
 	//setters
 	void setFd(int socketFd) { fd = socketFd; }
@@ -64,9 +61,11 @@ public:
 	
 	// I/P helpers
 	void detectHostname();
-	void appendInbuff(const std::string& data) { inbuff += data; }
+	void appendInbuff(const char* data, size_t n) { if (n == 0 || !data) return; inbuff.append(data, n); }
     bool extractLine(std::string& line);
-	void sendMessage(const std::string& message);//add CRLF, queue to outbuff, enable POLLOUT in server, check buffer 
+	bool sendMessage(const std::string& message);//add CRLF, queue to outbuff, enable POLLOUT in server, check buffer 
+	bool flushOutput();
+	void markForClose();
 	
 	// Channel management
     void joinChannel(const std::string& channel);

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/14 22:33:53 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/15 16:01:27 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -76,7 +76,7 @@ public:
 	void broadcastInChan(const std::string& msg, Client* exclude);
 	
 	void sendNamesList(Client* to);
-	void sendTopic(Client* to);//todo
+	void sendTopic(Client* to);
 	
 	//authorization check
 	bool canChangeTopic(const std::string& nickname) const;
@@ -84,4 +84,4 @@ public:
 	
 
 };
-#endif // CHANEL_HPP
+#endif // CHANNEL_HPP

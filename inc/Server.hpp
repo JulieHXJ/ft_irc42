@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:01:40 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/14 22:18:28 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/15 17:53:22 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,6 +60,7 @@ private:
 	void handleInvite(Client* client, const std::vector<std::string>& params);
 	void handleKick(Client* client, const std::vector<std::string>& params);
 	void handlePrivmsg(Client* client, const std::vector<std::string>& params);
+	// void handleQuit(Client* client, const std::vector<std::string>& params);
 	void handleMode(Client* client, const std::vector<std::string>& params);
 
 	// channel & client helpers

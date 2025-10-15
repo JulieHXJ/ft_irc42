@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 18:03:47 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/14 22:41:37 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/15 18:13:22 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -237,33 +237,52 @@ void Channel::broadcastInChan(const std::string& msg, Client* exclude) {
 
 void Channel::sendNamesList(Client* to){
     if (!to) return;
-    std::string names;
-    std::map<std::string, Client*>::iterator it = members.begin();
-    for (; it != members.end(); ++it) {
-        const std::string& nick = it->first;
-        if (isOperator(nick)) {
-            names += "@" + nick + " ";
-        } else {
-            names += nick + " ";
-        }
-    }
-    // 10 names a line
-    for (size_t i = 0; i < names.size(); i += 10) {
-        std::string chunk;
-        for (size_t j = i; j < names.size() && j < i + 10; ++j) {
-            if (!chunk.empty()) {
-                chunk += " ";
-            }
-            chunk += names[j];
-        }
-        // 353: "<nick> = <#chan> :name1 name2 ..."
-        to->sendMessage(":" SERVER_NAME " " RPL_NAMREPLY " " + to->getNickname()
-                        + " = " + chan_name + " :" + chunk);
-    }
 
+    // 1) Collect formatted names
+    std::vector<std::string> names;
+    for (std::map<std::string, Client*>::iterator it = members.begin(); it != members.end(); ++it) {
+        const std::string& nick = it->first;
+        names.push_back(isOperator(nick) ? ("@" + nick) : nick);
+    }
+    const std::string header = ":" SERVER_NAME " " RPL_NAMREPLY " " + to->getNickname() + " = " + chan_name + " :";
+
+    
+    std::string line;
+    for (size_t i = 0; i < names.size(); ++i) {
+        const std::string& t = names[i];
+        const std::string candidate = line.empty() ? t : (line + " " + t);
+
+        // Keep a safety margin from the 512 bytes max per IRC message (incl. prefix + CRLF)
+        if (header.size() + candidate.size() > 480) {
+            to->sendMessage(header + line);
+            line = t; // start a new line with the current token
+        } else {
+            line = candidate;
+        }
+    }
+    if (!line.empty()) {
+        to->sendMessage(header + line);
+    }
+    
     to->sendMessage(":" SERVER_NAME " " RPL_ENDOFNAMES " " + to->getNickname() + " " + chan_name + " :End of NAMES list");
 }
 
-void Channel::sendTopic(Client* to){
-    
+
+void Channel::sendTopic(Client* client) {
+    if (!client) return;
+
+    const std::string& nick = client->getNickname();
+    if (!isMember(nick)) {
+        client->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + nick + " " + chan_name + " :You're not on that channel");
+        return;
+    }
+
+    // If no topic is set
+    if (chan_topic.empty()) {
+        client->sendMessage(":" SERVER_NAME " " RPL_NOTOPIC " " + nick + " " + chan_name + " :No topic is set");
+        return;
+    }
+
+    // If a topic is set
+    client->sendMessage(":" SERVER_NAME " " RPL_TOPIC " " + nick + " " + chan_name + " :" + chan_topic);
 }

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/14 20:31:51 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/15 18:23:17 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -71,6 +71,11 @@ void Server::setNonBlocking(int fd){
     if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
         throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ") + std::strerror(errno));
 	}
+	// #ifdef __APPLE__
+	// int set = 1;
+	// setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+	// #endif
+
 }
 
 /**
@@ -128,7 +133,7 @@ void Server::removeClientFromAllChannels(int fd) {
 	Client* c = cit->second;
 	const std::string nick = c ? c->getNickname() : "";
 	
-	for (ChannelMap::iterator chIt = channel_lst.begin(); chIt != channel_lst.end()) {
+	for (ChannelMap::iterator chIt = channel_lst.begin(); chIt != channel_lst.end();) {
 		Channel* channel = chIt->second;
 		if (channel && !nick.empty() && channel->isMember(nick)) {
 			channel->broadcastInChan(":" + nick + " QUIT :Client disconnected", 0);
@@ -203,7 +208,7 @@ void Server::run(){
 		//2. handle each client socket， increment i only if not removed
 		for (size_t i = 1; i < pollfds.size();)
 		{
-			int fd = pollfds[i].fd;
+			// int fd = pollfds[i].fd;
 			short re = pollfds[i].revents;
 			bool removed = false;
 
@@ -245,16 +250,14 @@ void Server::acceptNewConnect(){
 			break;
         }
 		setNonBlocking(connfd);
-        addPollFd(pollfds, connfd, POLLIN);
+        addPollFd(pollfds, connfd, POLLIN | POLLOUT);
+		
 		
 		Client* newClient = new Client(connfd);
 		newClient->detectHostname();
 		client_lst[connfd] = newClient;
-
-        // send welcome message
-		sendWelcome(newClient);
         newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
-
+		
         // enable write for the newly added (it's at the back)
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
 		
@@ -276,7 +279,6 @@ bool Server::handleClientRead(size_t i){
     char buf[4096];
 	ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
 	if (r == 0) {
-		//client closed connection
 		Log::closed(fd);
 		cleanupIndex(i);
 		return true;
@@ -286,13 +288,14 @@ bool Server::handleClientRead(size_t i){
 		cleanupIndex(i);
 		return true;
 	}
-	cl->appendInbuff(buf);//append received data to client inbuff
+	cl->appendInbuff(buf, (size_t)r);//append received data to client inbuff
 	Log::recvBytes(fd, static_cast<size_t>(r));
 	
 	// 2) pop a complete line from client inbuff and handle commands
-	std::string Line;
-	while (cl->extractLine(Line)) {
-		handleCmd(cl, Line); // parse and handle cmds
+	std::string line;
+	while (cl->extractLine(line)) {
+		Log::dbg("fd=" + std::to_string(fd) + " CMD: [" + line + "]");//for debug
+		handleCmd(cl, line); // parse and handle cmds
 	}
 
     // If output is not empty (from WHO/welcome), keep POLLOUT on
@@ -351,16 +354,10 @@ void Server::pushToClient(int fd, const std::string& msg) {
     }
 }
 
-void Server::pushToMany(const std::vector<int>& fds, const std::string& msg) {
-    for (size_t k=0; k<fds.size(); ++k) pushToClient(fds[k], msg);
-}
-
-
 void Server::sendWelcome(Client* c) {
     if (!c) return;
     const std::string nick = c->getNickname().empty() ? "*" : c->getNickname();
     c->sendMessage(":" SERVER_NAME " " RPL_WELCOME  " " + nick + " :Welcome to " SERVER_NAME ", " + nick);
-    c->sendMessage(":" SERVER_NAME " " RPL_YOURHOST " " + nick + " :Your host is " SERVER_NAME);
+    c->sendMessage(":" SERVER_NAME " " RPL_YOURHOST " " + nick + " :Your host is " + c->getHostname() + ", running version v0.1 o itkol");
     c->sendMessage(":" SERVER_NAME " " RPL_CREATED  " " + nick + " :This server was created just now");
-    c->sendMessage(":" SERVER_NAME " " RPL_MYINFO   " " + nick + " " SERVER_NAME " v0.1 o itkol");
 }
