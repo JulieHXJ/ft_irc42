@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/10 16:59:35 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/15 17:41:11 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/17 13:37:37 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,6 @@ void Client::markForClose() {
 void Client::setRegistered() {
     if (!registered && !nickname.empty() && !username.empty() && pass_ok) {
         registered = true;
-        std::cout << "Client fd=" << fd << " (" << nickname << ") has completed registration.\n";
     }
 }
 
@@ -65,7 +64,6 @@ void Client::detectHostname() {
     } else {
         hostname = "unknown";
     }
-    printf("host detected: %s\n", hostname.c_str());
 }
 
 //to do

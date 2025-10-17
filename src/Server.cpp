@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/15 18:23:17 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/17 13:32:40 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -208,7 +208,6 @@ void Server::run(){
 		//2. handle each client socket， increment i only if not removed
 		for (size_t i = 1; i < pollfds.size();)
 		{
-			// int fd = pollfds[i].fd;
 			short re = pollfds[i].revents;
 			bool removed = false;
 
@@ -252,7 +251,6 @@ void Server::acceptNewConnect(){
 		setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN | POLLOUT);
 		
-		
 		Client* newClient = new Client(connfd);
 		newClient->detectHostname();
 		client_lst[connfd] = newClient;
@@ -295,14 +293,14 @@ bool Server::handleClientRead(size_t i){
 	std::string line;
 	while (cl->extractLine(line)) {
 		Log::dbg("fd=" + std::to_string(fd) + " CMD: [" + line + "]");//for debug
-		handleCmd(cl, line); // parse and handle cmds
+		handleCmd(cl, line);
 	}
 
-    // If output is not empty (from WHO/welcome), keep POLLOUT on
+    // If output is not empty, keep POLLOUT on
     if (cl->hasOutput()) {
         pollfds[i].events |= POLLOUT;
 	}
-	return false; // not removed
+	return false;
 }
 
 bool Server::handleWritable(size_t i){
@@ -310,7 +308,7 @@ bool Server::handleWritable(size_t i){
 	ClientMap::iterator it = client_lst.find(fd);
 	if (it == client_lst.end()) {
 		cleanupIndex(i);
-		return true;//index is removed
+		return true;
 	}
 	Client* cl = it->second;
 	std::string &ob = cl->getOutput();
@@ -323,7 +321,7 @@ bool Server::handleWritable(size_t i){
 	if (n < 0){
 		if (errno == EAGAIN || errno == EWOULDBLOCK) return false;
         cleanupIndex(i);
-        return true;//finished sending
+        return true;
 	}
 	Log::sendBytes(fd, static_cast<size_t>(n));
 	ob.erase(0, static_cast<size_t>(n));// remove sent data

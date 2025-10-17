@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/15 18:22:11 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/17 17:23:45 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,10 +28,11 @@ void Server::handlePass(Client* c, const std::vector<std::string>& params) {
     }
     Log::info ("PASS ok fd=" + std::to_string(c->getFd()));
     c->setPassOk(password);
-    if (c->isPassOk() && !c->getNickname().empty() && !c->getUsername().empty() && !c->isRegistered()) {
-        c->setRegistered();
+    c->setRegistered();
+    if (c->isRegistered()) {
         sendWelcome(c);
-        Log::info ("Client fd=" + std::to_string(c->getFd()) + " has completed registration.");
+        Log::info("Client fd=" + std::to_string(c->getFd()) +
+                  " (" + c->getNickname() + ") has completed registration.");
     }
 }
 
@@ -53,10 +54,11 @@ void Server::handleNick(Client* c, const std::vector<std::string>& params) {
         // for each channel: ch->broadcast(...) if needed
         c->sendMessage(":" + oldnick + " NICK :" + nick);
     }
-    if (c->isPassOk() && !c->getNickname().empty() && !c->getUsername().empty() && !c->isRegistered()) {
-        c->setRegistered();
+    c->setRegistered();
+    if (c->isRegistered()) {
         sendWelcome(c);
-        Log::info ("Client fd=" + std::to_string(c->getFd()) + " has completed registration.");
+        Log::info("Client fd=" + std::to_string(c->getFd()) +
+                  " (" + c->getNickname() + ") has completed registration.");
     }
 }
 
@@ -71,10 +73,11 @@ void Server::handleUser(Client* c, const std::vector<std::string>& params) {
     const std::string username = params[0];
     c->setUsername(username);
     
-    if (c->isPassOk() && !c->getNickname().empty() && !c->getUsername().empty() && !c->isRegistered()) {
-        c->setRegistered();
+    c->setRegistered();
+    if (c->isRegistered()) {
         sendWelcome(c);
-        Log::info ("Client fd=" + std::to_string(c->getFd()) + " has completed registration.");
+        Log::info("Client fd=" + std::to_string(c->getFd()) +
+                  " (" + c->getNickname() + ") has completed registration.");
     }
 }
 
@@ -92,9 +95,13 @@ void Server::handleJoin(Client* c, const std::vector<std::string>& params) {
         return;
     }
     Channel* ch = createChannel(chan);
-    if (!ch->addMember(c, key)) { return; }
+    if (!ch->addMember(c, key)) { 
+        Log::warn(c->getNickname() + " failed to join " + chan);
+        return; 
+    }
     //send names list already in addMember
     c->joinChannel(chan);
+    Log::joinEvt(c->getNickname(), chan);
 }
 
 //PART #tea :gotta run\r\n
@@ -127,6 +134,7 @@ void Server::handlePart(Client* c, const std::vector<std::string>& params) {
         channel_lst.erase(it); 
         delete ch; 
     }
+    Log::partEvt(c->getNickname(), chan, reason);
 }
 
 //TOPIC #tea :Tea time at 5pm\r\n
@@ -144,7 +152,7 @@ void Server::handleTopic(Client* client, const std::vector<std::string>& params)
     } else {
         c->setTopic(params[1], client); 
     }
-    
+    Log::topicEvt(client->getNickname(), chan, params.size() > 1 ? params[1] : "");
 }
 
 //KICK #tea bob :spamming\r\n
@@ -164,23 +172,7 @@ void Server::handleKick(Client* client, const std::vector<std::string>& params) 
     if (!c->isMember(target)) { client->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + client->getNickname() + " " + chan + " :You're not on that channel"); return; }
     c->broadcastInChan(":" + client->getNickname() + " KICK " + chan + " " + target, NULL);
     c->kickMember(client, target, reason);
-}
-
-       
-
-
-//todo, unclear IRC message format
-void Server::handleMode(Client* client, const std::vector<std::string>& params) {
-    if (!client) return;
-    if (!client->isRegistered()) { client->sendMessage(":" SERVER_NAME " " ERR_NOTREGISTERED " * :You have not registered"); return; }
-
-    IRCmessage msg; msg.command = "MODE"; msg.params = params;
-    std::string chan = params[0];
-    char mode = params[1][1];
-    // Minimal stub; real mode handling requires parsing and Channel setters
-    (void)params; // avoid unused parameter warning under -Werror
-    (void)mode;
-    client->sendMessage(":server 324 " + client->getNickname() + " :modes not implemented");
+    Log::kickEvt(client->getNickname(), chan, target, reason);
 }
 
 //INVITE bob #tea\r\n
@@ -191,7 +183,6 @@ void Server::handleInvite(Client* client, const std::vector<std::string>& params
 
     std::string nick = params[0];
     std::string chan = params[1];
-
 
     //find the channel
     ChannelMap::iterator it = channel_lst.find(chan);
@@ -212,7 +203,6 @@ void Server::handleInvite(Client* client, const std::vector<std::string>& params
     if(!c->inviteUser(nick)) {
         client->sendMessage(":" SERVER_NAME " NOTICE " + client->getNickname() + " :" + target->getNickname() + " is already invited to " + c->getName());
     }
-    
     client->sendMessage(":" SERVER_NAME " " RPL_INVITING " " + client->getNickname() + " " + nick + " " + chan);
     target->sendMessage(":" + client->getNickname() + " INVITE " + nick + " :" + chan);
 }
@@ -242,83 +232,240 @@ void Server::handlePrivmsg(Client* client, const std::vector<std::string>& param
     if (!dst) { client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHNICK " " + nick + " " + target + " :No such nick"); return; }
     dst->sendMessage(":" + nick + " PRIVMSG " + target + " :" + text);
     
-    // If no such nick, broadcast to all registered clients (simple roomless chat)
-    // for (size_t k = 1; k < pollfds.size(); ++k) {
-    //     int other = pollfds[k].fd;
-    //     Client* c = clients[other];
-    //     if (!c || c == client) continue; // skip sender here
-    //     c->sendMessage(":" + client->getNickname() + " PRIVMSG * :" + msg);
-    //     pollfds[k].events |= POLLOUT;
-    // }
+}
+
+// QUIT :<message>
+void Server::handleQuit(Client* client, const std::vector<std::string>& params){
+    if (!client) return;
+    const std::string nick = client->getNickname();
+    const std::string reason = params.empty() ? "" : params[0];
+    
+    ChannelMap::iterator it = channel_lst.begin();
+    while (it != channel_lst.end()) {
+        Channel* ch = it->second;
+        ChannelMap::iterator next = it;
+        ++next;
+        if (ch && ch->isMember(nick)) {
+            ch->broadcastInChan(":" + nick + " QUIT :" + reason, NULL);
+            ch->removeMember(nick);
+            client->leaveChannel(ch->getName());
+            // possibly delete empty channel
+            if (ch->getMemberCount() == 0) {
+                channel_lst.erase(it);
+                delete ch;
+            }
+        }
+        it = next;
+    }
+    // cleanupEmptyChannels();
+    Log::info("Client fd=" + std::to_string(client->getFd()) + " (" + nick + ") QUIT: " + reason);
+    client->markForClose();
 }
 
 
+// MODE #chan [modes [params...]]
+// MODE <nick>
+void Server::handleMode(Client* client, const std::vector<std::string>& params) {
+    if (!client) return;
+    if (!client->isRegistered()) { client->sendMessage(":" SERVER_NAME " " ERR_NOTREGISTERED " * :You have not registered"); return; }
+    if (params.empty()) { client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " MODE :Not enough parameters"); return; }
+    
+    const std::string target = params[0];
+    
+    // ----- MODE #chan -----
+    if (!target.empty() && target[0] == '#') {
+        ChannelMap::iterator it = channel_lst.find(target);
+        if (it == channel_lst.end()) {
+            client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHCHANNEL " " + client->getNickname() + " " + target + " :No such channel");
+            return;
+        }
+        Channel* ch = it->second;
+        
+        if (params.size() == 1) {
+            std::string modes = ch->getModesString();
+            std::string tail;                        
 
-// // QUIT :<message>
-// void Server::handleQuit(Client* client, const std::vector<std::string>& params){
-//     if (!c) return;
-//     const std::string nick = c->getNickname();
-//     std::map<std::string, Channel*>::iterator it = channel_lst.begin();
+            if (modes.find('k') != std::string::npos) {
+                Log::info("passkey set for channel " + target);
+                tail += " *";
+            }
+            if (modes.find('l') != std::string::npos) {
+                size_t lim = ch->getUserLimit();
+                if (lim > 0) tail += " " + std::to_string(lim);
+            }
 
-//     while (it != channel_lst.end()) {
-//         Channel* ch = it->second;
-//         if (ch->isMember(nick)) {
-//             ch->broadcastInChan(":" + nick + " QUIT :" + (msg.empty() ? "Quit" : msg), 0);
-//             ch->removeMember(nick);
-//             // possibly delete empty channel
-//             if (ch->getMemberCount() == 0) {
-//                 cleanupEmptyChannels();
-//                 continue;
-//             }
-//         }
-//         ++it;
-//     }
-// }
+            client->sendMessage(":" SERVER_NAME " " RPL_CHANNELMODEIS " " + client->getNickname() + " " + target + " " + modes + tail);
+            return;
+        }
 
-// void Server::cleanupEmptyChannels(){
-//     std::map<std::string, Channel*>::iterator it = channel_lst.begin();
-//     while (it != channel_lst.end()) {
-//         Channel* ch = it->second;
-//         if (ch->getMemberCount() == 0) {
-//             Channel* toDelete = ch;
-//             std::map<std::string, Channel*>::iterator eraseIt = it++;
-//             channel_lst.erase(eraseIt);
-//             delete toDelete;
-//         } else {
-//             ++it;
-//         }
-//     }
-// }
+        // validate operator privilege
+        if (!ch->isOperator(client->getNickname())) {
+            client->sendMessage(":" SERVER_NAME " " ERR_CHANOPRIVSNEEDED " " + client->getNickname() + " " + target + " :You're not channel operator");
+            return;
+        }
 
+        // params: [0]=#chan, [1]=modes, [2...]=args
+        const std::string modes = params[1];
+        if (modes.empty() || (modes[0] != '+' && modes[0] != '-')) {
+            client->sendMessage(":" SERVER_NAME " " ERR_UNKNOWNMODE " " + client->getNickname() + " " + target + " :Unknown mode flag");
+            return;
+        }
+
+        bool set = (modes[0] == '+');
+        size_t argIdx = 2;
+
+        for (size_t i = 1; i < modes.size(); ++i) {
+            char m = modes[i];
+            std::string param; 
+
+            switch (m) {
+                case 'i': // invite-only
+                case 't': // topic-restriction
+                    ch->setMode(m, set, "");
+                    break;
+
+                case 'k': // passkey
+                    if (set) {
+                        if (argIdx >= params.size()) {
+                            client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " MODE :Not enough parameters");
+                            return;
+                        }
+                        param = params[argIdx++];
+                        ch->setMode('k', true, param);
+                    } else {
+                        ch->setMode('k', false, "");
+                    }
+                    break;
+
+                case 'l': // user limit
+                    if (set) {
+                        if (argIdx >= params.size()) {
+                            client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " MODE :Not enough parameters");
+                            return;
+                        }
+                        param = params[argIdx++];
+                        ch->setMode('l', true, param);
+                    } else {
+                        ch->setMode('l', false, "");
+                    }
+                    break;
+
+                case 'o': // operator add/remove
+                    if (argIdx >= params.size()) {
+                        client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " MODE :Not enough parameters");
+                        return;
+                    }
+                    param = params[argIdx++];
+                    ch->setMode('o', set, param);
+                    break;
+
+                default:
+                    client->sendMessage(":" SERVER_NAME " " ERR_UNKNOWNMODE " " + client->getNickname() + " " + std::string(1, m) + " :is unknown mode char to me");
+                    break;
+            }
+        }
+
+        // broadcast
+        std::string broadcast = ":" + client->getNickname() + " MODE " + target + " " + modes;
+        for (size_t i = 2; i < argIdx; ++i) {
+            broadcast += " " + params[i];
+        }
+        ch->broadcastInChan(broadcast, NULL);
+        client->sendMessage(broadcast);
+        return;
+    }
+
+    // ----- MODE <nick> -----
+    if (!target.empty() && target[0] != '#' && params.size() == 1) {
+        Client* targetC = findClientByNick(target);
+        if (!targetC) {
+            client->sendMessage(":" SERVER_NAME " 401 " + client->getNickname() + " " + target + " :No such nick");
+            return;
+        }
+        std::string chans;
+        const std::vector<std::string>& joined = targetC->getChannels();
+        for (std::vector<std::string>::const_iterator it = joined.begin(); it != joined.end(); ++it) {
+            chans += *it + " ";
+        }
+
+        client->sendMessage(":" SERVER_NAME " 319 " + client->getNickname() + " " + target + " :" + chans);
+        return;
+    }
+
+    client->sendMessage(":" SERVER_NAME " " ERR_UMODEUNKNOWNFLAG " " + client->getNickname() + " :User mode handling not implemented");
+}
 
 
 void Server::handleCmd(Client* c, const std::string& line) {
-    printf("inside cmd handler\n");
     if (!c || line.empty()) return;
-    // Parse the command and execute appropriate actions
     IRCmessage msg = parseLine(line);
     if (msg.command.empty()) return;
-    // log
-    std::cout << "fd=" << c->getFd() << " CMD: " << msg.command << " ("
-              << (msg.params.empty() ? "" : msg.params[0]) << " ...)\n";
 
-    if (msg.command == "PASS")  {
-        printf("handling PASS\n");
-        handlePass(c, msg.params);//PASS <password>
-    }
+    if (msg.command == "PASS")  handlePass(c, msg.params);//PASS <password>
     else if (msg.command == "NICK") handleNick(c, msg.params);
     else if (msg.command == "USER") handleUser(c, msg.params);
     else if (msg.command == "JOIN")  handleJoin(c, msg.params);
     else if (msg.command == "PART")    handlePart(c, msg.params);
     else if (msg.command == "PRIVMSG") handlePrivmsg(c, msg.params);
-    else if (msg.command == "QUIT")  {
-        // handleQuit(c, msg.params); //todo
-        std::cout << "Client fd=" << c->getFd() << " requested QUIT. Closing connection.\n";
-    }
+    else if (msg.command == "QUIT")  handleQuit(c, msg.params);
     else if (msg.command == "MODE")   handleMode(c, msg.params);  
     else if (msg.command == "KICK")  handleKick(c, msg.params);
     else if (msg.command == "INVITE")  handleInvite(c, msg.params);
     else if (msg.command == "TOPIC")   handleTopic(c, msg.params);
+    else if (msg.command == "LIST")   handleList(c, msg.params);
+    else if (msg.command == "NAMES")   handleNames(c, msg.params);
+    else if (msg.command == "INFO")   handleInfo(c);
     else
         c->sendMessage(":" SERVER_NAME " " ERR_UNKNOWNCOMMAND " " + c->getNickname() + " " + msg.command + " :Unknown command");
 } 
+
+
+//LIST #keyword (for searching channles with keyword)
+void Server::handleList(Client* c, const std::vector<std::string>& params) {
+    if (!c || !c->isRegistered()) return;
+    std::string pattern;
+    if (!params.empty()) pattern = params[0]; 
+    for (ChannelMap::iterator it = channel_lst.begin(); it != channel_lst.end(); ++it) {
+        Channel* ch = it->second;
+        if (!pattern.empty() && ch->getName().find(pattern) == std::string::npos)
+            continue;
+        c->sendMessage(":" SERVER_NAME " 322 " + c->getNickname() + " " +
+                       ch->getName() + " " + std::to_string(ch->getMemberCount()) +
+                       " :" + ch->getTopic());
+    }
+    c->sendMessage(":" SERVER_NAME " 323 " + c->getNickname() + " :End of LIST");
+}
+
+// NAMES（#channel）
+void Server::handleNames(Client* c, const std::vector<std::string>& params) {
+	if (!c || !c->isRegistered()) return;
+	if (params.empty()) {
+		// List names for all channels
+		for (ChannelMap::iterator it = channel_lst.begin(); it != channel_lst.end(); ++it) {
+			Channel* ch = it->second;
+			ch->sendNamesList(c);
+		}
+	} else {
+		// List names for specified channels
+		for (size_t i = 0; i < params.size(); ++i) {
+			const std::string& chanName = params[i];
+			ChannelMap::iterator it = channel_lst.find(chanName);
+			if (it != channel_lst.end()) {
+				Channel* ch = it->second;
+				ch->sendNamesList(c);
+			} else {
+				// No such channel, send empty NAMES reply
+				c->sendMessage(":" SERVER_NAME " 353 " + c->getNickname() + " = " + chanName + " :");
+				c->sendMessage(":" SERVER_NAME " 366 " + c->getNickname() + " " + chanName + " :End of NAMES list");
+			}
+		}
+	}
+}
+
+// ADMIN
+void Server::handleInfo(Client* c) {
+    if (!c) return;
+    c->sendMessage(":" SERVER_NAME " 256 " + c->getNickname() + " :Administrative info");
+    c->sendMessage(":" SERVER_NAME " 257 " + c->getNickname() + " :Admin: xhuang, mmonika & gahmed (Server Owner)");
+    c->sendMessage(":" SERVER_NAME " 259 " + c->getNickname() + " :Location: Heilbronn, Germany");
+}

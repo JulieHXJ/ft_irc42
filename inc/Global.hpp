@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Global.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 16:43:33 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/15 17:54:31 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/16 13:17:13 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,7 +54,8 @@
 // --- topic ---
 #define RPL_NOTOPIC        "331"
 #define RPL_TOPIC          "332"
-
+#define RPL_TOPICWHOTIME   "333"
+#define RPL_CHANNELMODEIS  "324"
 // Names
 #define RPL_INVITING	  "341"
 #define RPL_NAMREPLY       "353"
@@ -84,6 +85,8 @@
 #define ERR_NORECIPIENT    "411"
 #define ERR_NOTEXTTOSEND   "412"
 #define ERR_UNKNOWNCOMMAND "421"
+#define ERR_UNKNOWNMODE "472"
+#define ERR_UMODEUNKNOWNFLAG "501"
 
 // ========================
 //  Common Types

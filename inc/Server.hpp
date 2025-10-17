@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:01:40 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/15 17:53:22 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/17 14:44:45 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,11 +45,10 @@ private:
 
 	//server main loop modules
 	void acceptNewConnect();//detection on listenfd, accept, create client(fd, host), add to pollfd list
-	void cleanupIndex(size_t i);
 	bool handleClientRead(size_t i);
 	bool handleWritable(size_t i);
 
-	// Command handlers (defined in Server_cmd.cpp)
+	// Command handlers (defined in Cmdhandler.cpp)
 	void handleCmd(Client* c, const std::string& Line);
 	void handlePass(Client* c, const std::vector<std::string>& params);
     void handleNick(Client* c, const std::vector<std::string>& params);
@@ -60,8 +59,13 @@ private:
 	void handleInvite(Client* client, const std::vector<std::string>& params);
 	void handleKick(Client* client, const std::vector<std::string>& params);
 	void handlePrivmsg(Client* client, const std::vector<std::string>& params);
-	// void handleQuit(Client* client, const std::vector<std::string>& params);
+	void handleQuit(Client* client, const std::vector<std::string>& params);
 	void handleMode(Client* client, const std::vector<std::string>& params);
+
+	// Additional command handlers (defined in CmdMore.cpp)
+	void handleList(Client* c, const std::vector<std::string>& params);
+	void handleNames(Client* c, const std::vector<std::string>& params);
+	void handleInfo(Client* c);
 
 	// channel & client helpers
 	void removeClientFromAllChannels(int fd);
@@ -73,6 +77,7 @@ public:
     Server(const Server& other);       
     Server& operator=(const Server& rhs); 
 	
+	void cleanupIndex(size_t i);
 	void serverInit(int port, std::string password);//setup server socket，listen， add to pollfd list
 	void run(); //main loop: accept, recv, send 
 	

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 18:03:47 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/15 18:13:22 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/17 17:48:34 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -111,7 +111,7 @@ bool Channel::addMember(Client* client, const std::string& password) {
 
     // Broadcast JOIN: <nick> JOIN <channel>
     broadcastInChan(":" + nick + " JOIN " + chan_name, NULL); // :john!johndoe@localhost JOIN #general
-    Log::joinEvt(nick, chan_name);
+    // Log::joinEvt(nick, chan_name);
 
     // Send topic and names list to the new member
     if (chan_topic.empty()) {
@@ -146,10 +146,8 @@ bool Channel::kickMember(Client* requester, const std::string& targetNick, const
     Client* targetClient = members[targetNick];
     
     // Broadcast KICK: <requester> KICK <channel> <target> : <reason>
-    std::string kickMsg = ":" + reqNick + " KICK " + chan_name + " " + targetNick + " :" + (reason.empty() ? "Kicked" : reason);
+    std::string kickMsg = ":" + reqNick + " KICK " + chan_name + " " + targetNick + " :" + (reason.empty() ? "" : reason);
     Log::kickEvt(reqNick, chan_name, targetNick, reason);
-    
-    // notify the kicked user
     
     removeMember(targetNick);
     broadcastInChan(kickMsg, NULL);
@@ -170,7 +168,7 @@ bool Channel::addOperator(const std::string& nickname) {
     }
     
     operators[nickname] = it->second;
-    Log::info("[MODE] +o" + chan_name + ": " + nickname + " is now an operator");
+    Log::info("[MODE] +o " + chan_name + ": " + nickname + " is now an operator");
     return true;
 }
 

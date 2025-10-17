@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 00:53:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/15 18:17:27 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/17 22:26:05 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,7 +26,8 @@ PART #tea :gotta run\r\n
 INVITE bob #tea\r\n
 KICK #tea bob :stop spamming\r\n
 PRIVMSG #tea :hello everyone\r\n
-MODE #tea +it\r\n
+PRIVMSG bob :hi bob\r\n
+MODE #tea +i\r\n
 QUIT :Client exiting\r\n
  */
 struct IRCmessage {
