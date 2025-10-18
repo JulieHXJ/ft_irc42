@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/17 17:23:45 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/18 16:10:19 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -420,7 +420,7 @@ void Server::handleCmd(Client* c, const std::string& line) {
 } 
 
 
-//LIST #keyword (for searching channles with keyword)
+//LIST #keyword (for searching channles with keyword): channel name, usernb, topic
 void Server::handleList(Client* c, const std::vector<std::string>& params) {
     if (!c || !c->isRegistered()) return;
     std::string pattern;
@@ -440,7 +440,7 @@ void Server::handleList(Client* c, const std::vector<std::string>& params) {
 void Server::handleNames(Client* c, const std::vector<std::string>& params) {
 	if (!c || !c->isRegistered()) return;
 	if (params.empty()) {
-		// List names for all channels
+		// List names for all channels : channel, nicknames
 		for (ChannelMap::iterator it = channel_lst.begin(); it != channel_lst.end(); ++it) {
 			Channel* ch = it->second;
 			ch->sendNamesList(c);
@@ -462,7 +462,7 @@ void Server::handleNames(Client* c, const std::vector<std::string>& params) {
 	}
 }
 
-// ADMIN
+// INFO
 void Server::handleInfo(Client* c) {
     if (!c) return;
     c->sendMessage(":" SERVER_NAME " 256 " + c->getNickname() + " :Administrative info");

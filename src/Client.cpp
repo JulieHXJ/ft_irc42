@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/10 16:59:35 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/17 13:37:37 by junjun           ###   ########.fr       */
+/*   Updated: 2025/10/18 16:23:30 by xhuang           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,12 +27,6 @@ void Client::setRegistered() {
 
 //extract a complete lines from client inbuff without \r\n
 bool Client::extractLine(std::string& line){
-    
-    // std::string::size_type pos = inbuff.find(CRLF);
-    // if (pos == std::string::npos) return false;
-    // line = inbuff.substr(0, pos);//pop out the line without \r\n
-    // inbuff.erase(0, pos + 2);//remove the line with \r\n
-    // return true;
 
     // Find '\n' first (covers \r\n and lone \n)
     size_t nl = inbuff.find('\n');
@@ -66,14 +60,12 @@ void Client::detectHostname() {
     }
 }
 
-//to do
 bool Client::sendMessage(const std::string& message) {
     if (message.empty()) return true;
 
     // Append CRLF as required by IRC spec
     outbuff += message;
     outbuff += CRLF;
-
     return flushOutput();
 }
 
