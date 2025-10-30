@@ -11,11 +11,13 @@
 /* ************************************************************************** */
 
 #pragma once
-#include "Client.hpp"
+#include "Global.hpp"
 
 #include <string>
 #include <unordered_set>
 #include <unordered_map>
+
+class Client;
 
 class Channel {
 	private:

@@ -77,7 +77,7 @@
 ## 🦵 Phase 7: Kick Command
 
 #### 11. Kick Implementation
-- [ ] `bool kickMember(Client* requester, const std::string& targetNickname, const std::string& reason)`
+- [x] `bool kickMember(Client* requester, const std::string& targetNickname, const std::string& reason)`
     - [ ] Validate requester is operator
     - [ ] Validate target exists in channel
     - [ ] Remove target from channel

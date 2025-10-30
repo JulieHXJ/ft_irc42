@@ -10,31 +10,52 @@
 #                                                                              #
 # **************************************************************************** #
 
-NAME        = ircserv
+NAME		= ircserv
 
-CXX         = c++
+CC 			= c++
 
-CXXFLAGS    = -Wall -Wextra -Werror -std=c++17
+CPPFLAGS	= -Wall -Wextra -Werror -std=c++17
 
-SRCS		= src/main.cpp src/Server.cpp
+VALGRIND	= valgrind --leak-check=full --track-origins=yes
 
-OBJS		= $(SRCS:.cpp=.o)
+SRC			= src/main.cpp src/Server.cpp src/Client.cpp src/Cmdhandler.cpp src/Channel.cpp src/Parser.cpp
 
-all: $(NAME)
+OBJ_DIR		= obj
+OBJ			= $(SRC:%.cpp=$(OBJ_DIR)/%.o)
 
-$(NAME): $(OBJS)
-		$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME) 
+BOT_BIN		= ircbot
+BOT_SRC		= src/Bot.cpp src/Parser.cpp
+BOT_OBJ		= $(BOT_SRC:%.cpp=$(OBJ_DIR)/%.o)
 
-%.o:	 %.cpp
-		$(CXX) $(CXXFLAGS) -c $< -o $@
-	
+all: $(NAME) 
+bonus: $(BOT_BIN)
+
+$(NAME): $(OBJ)
+	@echo "\033[34m🔄 Loading....\033[0m"
+	@$(CC) $(CPPFLAGS) -o $(NAME) $(OBJ)
+	@echo "\033[32m🚀 Program is ready to execute\033[0m"
+
+$(BOT_BIN): $(BOT_OBJ)
+	@echo "\033[34m🔄 Loading IRCBOT....\033[0m"
+	@$(CC) $(CPPFLAGS) -o $(BOT_BIN) $(BOT_OBJ)
+	@echo "\033[32m🚀 IRCBOT is ready\033[0m"
+
+$(OBJ_DIR)/%.o: %.cpp
+	@mkdir	-p	$(dir $@)
+	@$(CC) $(CPPFLAGS) -c $< -o $@
+
 clean:
-	rm -f $(OBJS)
-	
-fclean:		clean
-	rm -f $(NAME)
+	@rm -f $(OBJ) $(BOT_OBJ)
+	@echo "\033[31mObject files removed\033[0m"
 
-re:		fclean 
-		@$(MAKE) all
+fclean: clean
+	@rm -f $(NAME) $(BOT_BIN)
+	@rm -rf $(OBJ_DIR)
+	@echo "\033[31mProgram removed\033[0m"
 
-.PHONY: all clean fclean re
+re: fclean all
+
+valgrind: $(NAME)
+	$(VAL) ./$(NAME)
+
+.PHONY: all clean fclean re valgrind bonus
