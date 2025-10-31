@@ -3,13 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/09/27 16:16:35 by mmonika           #+#    #+#             */
-/*   Updated: 2025/09/27 17:18:55 by mmonika          ###   ########.fr       */
+/*   Created: Invalid date        by                   #+#    #+#             */
+/*   Updated: 2025/11/01 01:15:22 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
+
+
+#include "../inc/Client.hpp"
 #include "../inc/Channel.hpp"
 
 Channel::Channel(const std::string& name) : name(name), topic(""), passKey(""), inviteOnly(false), topicRestriction(false), maxUserLimit(0) {}
@@ -18,9 +21,9 @@ Channel::Channel(const Channel& other) {*this = other;}
 
 Channel& Channel::operator=(const Channel& other) {
     if (this != &other) {
-        name = other.name;
-        topic = other.topic;
-        passKey = other.passKey;
+        chan_name = other.chan_name;
+        chan_topic = other.chan_topic;
+        chan_passkey = other.chan_passkey;
         inviteOnly = other.inviteOnly;
         topicRestriction = other.topicRestriction;
         maxUserLimit = other.maxUserLimit;
@@ -57,7 +60,7 @@ bool Channel::addMember(Client* client, const std::string& password) {
         operators[client->getNickname()] = client;
     }
     std::string joinMsg = ":" + client->getNickname() + " JOIN " + name; // :john!johndoe@localhost JOIN #general
-    broadcast(joinMsg);
+    broadcast(joinMsg, nullptr);
     if (!topic.empty()) {
         client->sendMessage(":" + std::string(SERVER_NAME) + " 332 " + client->getNickname() + " " + name + " :" + topic);
     }

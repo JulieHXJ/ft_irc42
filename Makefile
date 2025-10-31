@@ -3,12 +3,13 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+         #
+#    By: junjun <junjun@student.42.fr>              +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
-#    Created: 2025/09/08 15:42:03 by junjun            #+#    #+#              #
-#    Updated: 2025/09/27 09:31:05 by mmonika          ###   ########.fr        #
+#    Created: Invalid date        by                   #+#    #+#              #
+#    Updated: 2025/11/01 01:07:41 by junjun           ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
+
 
 NAME		= ircserv
 

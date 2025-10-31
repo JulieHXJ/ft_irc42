@@ -3,17 +3,16 @@
 /*                                                        :::      ::::::::   */
 /*   main.cpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/08 15:49:16 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/28 19:09:48 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/10/09 22:59:57 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../inc/Server.hpp"
 #include <csignal> // signal, SIGPIPE, SIG_IGN
 #include <cstdlib> // std::atoi
-#include <iostream>
 #include <stdexcept>
 
 volatile sig_atomic_t g_stop = 0;  // signal flag defination
@@ -33,9 +32,15 @@ static int parsePort(int argc, char** argv) {
  * Usage: ./ircserv [port]
  * Default port is 6667 if not specified.*/
 int main(int argc, char** argv) {
+    if (argc < 3)
+    {
+        std::cerr << "Usage: ./ircserv <port> <password>" << std::endl;
+        return 1;
+    }
     try
     {
         const int port = parsePort(argc, argv);
+        std::string password = argv[2];
         
         // Ignore SIGPIPE (safe even if send() uses MSG_NOSIGNAL)
         if (std::signal(SIGPIPE, SIG_IGN) == SIG_ERR)
@@ -50,9 +55,8 @@ int main(int argc, char** argv) {
         
         Server server;
         std::cout << "Starting server on port " << port << "...\n";
-        server.serverInit(port);
+        server.serverInit(port, password);
         server.run();
-        server.closeFds();
     }
     catch(const std::exception& e)
     {

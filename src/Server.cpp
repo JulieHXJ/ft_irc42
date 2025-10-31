@@ -3,45 +3,65 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/07 19:11:52 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/11/01 01:18:41 by junjun           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../inc/Server.hpp"
-#include <fcntl.h>
-#include <unistd.h> // close
-#include <arpa/inet.h> // inet_ntop
-#include <cerrno>
-#include <cstring>
-#include <stdexcept>
-#include <sstream>          // std::ostringstream
-#include <csignal>
+#include "../inc/Log.hpp" // nowStr(), newConnect()
 
 extern volatile sig_atomic_t g_stop;// define in main (“There is a variable called g_stop, it’s declared elsewhere, it can change suddenly (signal), and I want to use it here.”)
 
-static const size_t MAX_OUTBUF = 256 * 1024;
 
-namespace {
-
-	void logNew(int fd, const sockaddr_in& a){
-        char ip[INET_ADDRSTRLEN] = {0};
-        ::inet_ntop(AF_INET, &a.sin_addr, ip, sizeof(ip));
-        std::cout << "[+] New connection from " << ip << ":" << ntohs(a.sin_port)
-                  << ", fd=" << fd << "\n";
-    }
-	
-	// void logClose(int fd){ std::cout << "[-] fd=" << fd << " closed\n"; }
+Server::Server(const Server& other) {
+	// Copy configuration, but not open resources
+	this->listenfd = -1;
+	this->password = other.password;
+	this->pollfds.clear();
+	this->client_lst.clear();
+	this->channel_lst.clear();
 }
 
 Server::~Server(){
+	for (size_t i = 0; i < pollfds.size(); ++i) {
+		::close(pollfds[i].fd);
+	}
+	pollfds.clear();
+
+	 // delete all channels
+	for (ChannelMap::iterator it = channel_lst.begin(); it != channel_lst.end(); ++it) {
+		delete it->second;
+	}
+	channel_lst.clear();
+
+	// delete all clients
+	for (ClientMap::iterator it = client_lst.begin(); it != client_lst.end(); ++it) {
+		delete it->second;
+	}
+	client_lst.clear();//why at last?
+}
+
+Server& Server::operator=(const Server& rhs){
+    if (this == &rhs) return *this;
     for (size_t i = 0; i < pollfds.size(); ++i) {
-        ::close(pollfds[i].fd);
+        if (pollfds[i].fd >= 0) ::close(pollfds[i].fd);
     }
-    std::map<int, Client*>::iterator it = fd2client.begin();//do i need it?
-    for (; it != fd2client.end(); ++it) delete it->second;
+    pollfds.clear();
+    ChannelMap::iterator it = channel_lst.begin();
+    while (it != channel_lst.end()) {
+        Channel* toDelete = it->second;
+        ChannelMap::iterator er = it++;
+        channel_lst.erase(er);
+        delete toDelete;
+    }
+    client_lst.clear();
+
+    listenfd = -1;
+    password = rhs.password;
+    return *this;
 }
 
 //helpers
@@ -49,9 +69,13 @@ void Server::setNonBlocking(int fd){
 	int flags = ::fcntl(fd, F_GETFL, 0);
     if (flags == -1) flags = 0;
     if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ")
-                                 + std::strerror(errno));
+        throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ") + std::strerror(errno));
 	}
+	// #ifdef __APPLE__
+	// int set = 1;
+	// setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+	// #endif
+
 }
 
 /**
@@ -63,6 +87,7 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
 	pfd.events = events;
 	pfd.revents = 0;
 	pfds.push_back(pfd);// add to the end
+	fd_index[sckfd] = pfds.size() - 1; // map fd to its index in pollfds
 }
 
 /**
@@ -70,64 +95,69 @@ void Server::addPollFd(std::vector<pollfd>& pfds, int sckfd, short events) {
  * @note swap with the last one and pop_back
  */
 void Server::removePollFd(std::vector<pollfd>& pfds, size_t index) {
-	if (pfds.empty() | index >= pfds.size())
-        return; // safety guard
+	if (pfds.empty() || index >= pfds.size()) return;
 
-    pfds[index] = pfds[ pfds.size() - 1 ];  // copy last element into index
-    pfds.pop_back();   
+	const int removed_fd = pfds[index].fd;
+    if (index != pfds.size() - 1) {
+        const int last = pfds[pfds.size() - 1].fd;
+        pfds[index] = pfds[pfds.size() - 1];
+        fd_index[last] = index;
+    }
+	pfds.pop_back();
+	fd_index.erase(removed_fd); // remove the erased fd from map
 }
+
 
 /**
- * @brief Extract a line ending with '\n' from the input buffer.
- * 
- * @param inbuff The input buffer containing received data.
- * @param line The extracted line without the trailing '\n' or '\r'.
- * @note 1. find the first '\n'
- * 2. extract the line without '\n'
- * 3. remove '\r' if present
- * 4. remove this line (with '\n') from inbuff 
+ * @brief Close the socket, erase buffers, and remove from pollfds.
  */
-bool Server::getLine(std::string& inbuff, std::string& line) {
-	std::string::size_type pos = inbuff.find('\n'); 
-	if (pos == std::string::npos) return false; 
-	line = inbuff.substr(0, pos);
-	if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
-	inbuff.erase(0, pos + 1); 
-	return true;
+void Server::cleanupIndex(size_t i){
+    if (i >= pollfds.size()) return;
+    const int fd = pollfds[i].fd;
+
+	removeClientFromAllChannels(fd);
+    ClientMap::iterator it = client_lst.find(fd);
+    if (it != client_lst.end()) {
+        delete it->second;
+        client_lst.erase(it);
+    }
+	
+	removePollFd(pollfds, i);
+	Log::closed(fd);
+	::close(fd);
 }
 
-//todo: client functions
-void Client::sendMessage(const std::string& line) {
-    // ensure CRLF; server will not add if already present
-    std::string out = line;
-    if (out.size() < 2 || out[out.size()-2] != '\r' || out[out.size()-1] != '\n')
-        out += "\r\n";
-    if (server_) server_->pushLine(fd_, out);
+void Server::removeClientFromAllChannels(int fd) {
+	ClientMap::iterator cit = client_lst.find(fd);
+	if (cit == client_lst.end()) return;
+	Client* c = cit->second;
+	const std::string nick = c ? c->getNickname() : "";
+	
+	for (ChannelMap::iterator chIt = channel_lst.begin(); chIt != channel_lst.end();) {
+		Channel* channel = chIt->second;
+		if (channel && !nick.empty() && channel->isMember(nick)) {
+			channel->broadcast(":" + nick + " QUIT :Client disconnected", nullptr);
+			channel->removeMember(nick);
+		}
+		//delete empty channel
+		if (channel && channel->getMemberCount() == 0) {
+			Channel* toDelete = channel;
+			ChannelMap::iterator er = chIt++;
+			channel_lst.erase(er);
+			delete toDelete;
+		} else { ++chIt; }
+	}
 }
-
 
 /* ============================ server functions ============================ */
-void Server::closeFds(){
-	for (size_t i = 0; i < pollfds.size(); ++i) {
-		close(pollfds[i].fd);
-	}
-	pollfds.clear();
-	inbuff.clear();
-	outbuff.clear();
-}
-
-
-void Server::serverInit(int port){ 
+void Server::serverInit(int port, std::string password){
+	this->password = password;
 	//1) Create socket. ipv4, tcp
 	listenfd = ::socket(AF_INET, SOCK_STREAM, 0); 
 	if (listenfd < 0) { 
 		throw std::runtime_error("socket failed");
 	} 
-	
-	//2) allow socket descriptor to be reusable
-	//setsockopt() is used to set options for the socket referred to by the file descriptor sockfd.
-	//Here, it sets the SO_REUSEADDR option, which allows the socket to bind to an address that is already in use.
-	//This is useful for server applications that need to restart and bind to the same port without waiting for the OS to release it.
+	//2) set socket options
 	int yes = 1;
     if (::setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
 		::close(listenfd);
@@ -139,7 +169,6 @@ void Server::serverInit(int port){
         throw std::runtime_error(std::string("setsockopt(SO_REUSEPORT): ") + std::strerror(errno));
     }
 	#endif
-	
 	//3) bind
 	sockaddr_in addr; 
 	std::memset(&addr, 0, sizeof(addr)); 
@@ -148,19 +177,16 @@ void Server::serverInit(int port){
 	addr.sin_port = htons(port); //bind the socket to IP and port 
 	if (::bind(listenfd, (sockaddr*)&addr, sizeof(addr)) < 0) {
 		::close(listenfd);
-        throw std::runtime_error("bind failed");
+        throw std::runtime_error(std::string("bind failed: ")+ std::strerror(errno));
     }
-	
 	// 4) listen
     if (::listen(listenfd, 64) < 0) {
 		::close(listenfd);
-        throw std::runtime_error("listen failed");
+        throw std::runtime_error(std::string("listen failed: ") + std::strerror(errno));
     }
-	
 	setNonBlocking(listenfd);
 	pollfds.clear();
 	addPollFd(pollfds, listenfd, POLLIN);
-	
 	std::cout << "Listening on 0.0.0.0:" << port << " ... (waiting clients)\n";
 }
 
@@ -170,18 +196,18 @@ void Server::run(){
 	{
 		if (pollfds.empty()) break; // exit loop if no fds to monitor
 		int n = ::poll(&pollfds[0], pollfds.size(), 500);// 500ms timeout to check g_stop
+		
 		if (n < 0) {
 			if (errno == EINTR) continue; // interrupted by signal, retry
 			throw std::runtime_error(std::string("poll: ") + std::strerror(errno));
 		}
 	
-		//1. accept new connections
-		acceptNew();
+		//1. accept new connections: create client, add to client_lst
+		acceptNewConnect();
 		
 		//2. handle each client socket， increment i only if not removed
 		for (size_t i = 1; i < pollfds.size();)
 		{
-			int fd = pollfds[i].fd;
 			short re = pollfds[i].revents;
 			bool removed = false;
 
@@ -193,7 +219,7 @@ void Server::run(){
 			
 			//2.2 handle readable fds
 			if (!removed && (re & POLLIN)) {
-				removed = handleReadable(i);
+				removed = handleClientRead(i);
 				if (removed) continue;
 			}
 			//2.3 handle writable fds
@@ -206,13 +232,11 @@ void Server::run(){
 	}
 }
 
-
-
 /**
  * @brief Accept new incoming connections on the listening socket. 
  * Print welcone message and the client info.
  */
-void Server::acceptNew(){
+void Server::acceptNewConnect(){
     if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;//no new connection
 
     for(;;){
@@ -221,152 +245,106 @@ void Server::acceptNew(){
         if (connfd < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             if (errno == EINTR) continue;
-            logErr("accept"); break;
+            perror("accept"); 
+			break;
         }
-
-        setNonBlocking(connfd);
-        addPollFd(pollfds, connfd, POLLIN);
-
-        // initialize buffer for this client
-        inbuff[connfd].clear();
-		outbuff[connfd].clear();
+		setNonBlocking(connfd);
+        addPollFd(pollfds, connfd, POLLIN | POLLOUT);
 		
-        // outbuff[connfd] += ":Server NOTICE * :🎉🎉 Yo! Welcome to *Club42 Chatroom* 🍹\r\n";
-		// create Client
-        Client* c = new Client(cfd);
-        c->attachServer(this);
-        fd2client[cfd] = c;
-
-        // greeting
-        c->sendMessage(":"
-            + std::string(SERVER_NAME)
-            + " NOTICE * :Welcome to Club42 ✨");
-
-
-
-
+		Client* newClient = new Client(connfd);
+		newClient->detectHostname();
+		client_lst[connfd] = newClient;
+        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
 		
         // enable write for the newly added (it's at the back)
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
 		
-        logNew(connfd, clientAddr);
+		//put in server log
+        Log::newConnect(connfd, clientAddr);
     }
-}
-
-/**
- * @brief Close the socket, erase buffers, and remove from pollfds.
- */
-void Server::cleanupIndex(size_t i){
-    int fd = pollfds[i].fd;
-
-	 // remove from channel membership
-	 removeClientFromAllChannels(fd);
-
-	 // erase nick map entry if any
-	
-    
-    ::close(fd);
-    inbuff.erase(fd);
-    outbuff.erase(fd);
-    removePollFd(pollfds, i); //pop back swap
-	std::cout << "[-] fd=" << fd << " closed\n";
 }
 
 /**
  * @brief keep receiving and appending until EAGAIN,
  * then extract lines, process command, generate responses
  */
-bool Server::handleReadable(size_t i){
+bool Server::handleClientRead(size_t i){
 	int fd = pollfds[i].fd;
+	ClientMap::iterator it = client_lst.find(fd);
+	if (it == client_lst.end()) { cleanupIndex(i); return true; }
+	Client* cl = it->second;
+
     char buf[4096];
-	
-	// 1) read in buffer
-	for(;;){
-        ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
-        if (r > 0) {
-            inbuff[fd].append(buf, static_cast<size_t>(r));
-        } else if (r == 0) {
-			//client closed connection
-            cleanupIndex(i);
-            return true; // inde was swap-removed; caller must not ++i
-        } else {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-            std::perror("recv");
-            cleanupIndex(i);
-            return true;
-        }
-    }
-	
-	// 2) parse complete lines & act
-	std::string line;
-	while (getLine(inbuff[fd], line)) {
-		// trim spaces
-		while (!line.empty() && (line[0]==' ' || line[0]=='\t')) line.erase(0,1);
-		if (line.empty()) continue;
-		
-        // if (line == "KILL") {
-		// 	cleanupIndex(i);
-        //     return true;
-        // }
-        // if (line == "WHO") {
-		// 	std::ostringstream oss;
-		// 	oss << "USERS:";
-        //     for (size_t k = 1; k < pollfds.size(); ++k) {
-		// 		oss << "fd = " << pollfds[k].fd;
-		// 	}
-        //     outbuff[fd] += oss.str() + "\r\n";
-        //     // ensure POLLOUT on this fd
-        //     pollfds[i].events |= POLLOUT;
-        //     continue;
-        // }
-		
-		handleCmd(fd, line); // todo: command handler functions in Server_cmd.cpp
-		
-        // broadcast to all other clients
-        // for (size_t j = 1; j < pollfds.size(); ++j) {
-		// 	int other = pollfds[j].fd;
-        //     if (other == fd) continue;
-        //     if (outbuff[other].size() + line.size() + 2 <= MAX_OUTBUF) {
-		// 		outbuff[other] += line;
-        //         outbuff[other] += "\r\n";
-        //         pollfds[j].events |= POLLOUT;
-        //     }
-        // }
+	ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
+	if (r == 0) {
+		Log::closed(fd);
+		cleanupIndex(i);
+		return true;
+	} else if (r < 0) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK) return false; // no data available
+		std::perror("recv");
+		cleanupIndex(i);
+		return true;
 	}
+	cl->appendInbuff(buf, (size_t)r);//append received data to client inbuff
+	Log::recvBytes(fd, static_cast<size_t>(r));
 	
-    // If output is nnot empty (from WHO/welcome), keep POLLOUT on
-    if (!outbuff[fd].empty()) {
+	// 2) pop a complete line from client inbuff and handle commands
+	std::string line;
+	while (cl->extractLine(line)) {
+		Log::dbg("fd=" + std::to_string(fd) + " CMD: [" + line + "]");//for debug
+		handleCmd(cl, line);
+	}
+
+    // If output is not empty, keep POLLOUT on
+    if (cl->hasOutput()) {
         pollfds[i].events |= POLLOUT;
 	}
-	return false; // not removed
+	return false;
 }
 
 bool Server::handleWritable(size_t i){
 	int fd = pollfds[i].fd;
-	std::string &ob = outbuff[fd];
-	
-	while (!ob.empty()){
-		ssize_t w = ::send(fd, ob.data(), ob.size(), 0);
-		if (w > 0) {
-			ob.erase(0, static_cast<size_t>(w));// remove sent data
-		} else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			return false; // cannot send more now (对方 TCP 接收窗口满了、内核发送缓冲不够等)
-		} else {
-			std::perror("send");
-			cleanupIndex(i);
-			return true;//index is removed
-		}
+	ClientMap::iterator it = client_lst.find(fd);
+	if (it == client_lst.end()) {
+		cleanupIndex(i);
+		return true;
 	}
-	pollfds[i].events = POLLIN;//all sent
+	Client* cl = it->second;
+	std::string &ob = cl->getOutput();
+	if (ob.empty()){
+		pollfds[i].events &= ~POLLOUT; // only close POLLOUT
+		return false;
+	}
+	
+	ssize_t n = ::send(fd, ob.data(), ob.size(), 0);
+	if (n < 0){
+		if (errno == EAGAIN || errno == EWOULDBLOCK) return false;
+        cleanupIndex(i);
+        return true;
+	}
+	Log::sendBytes(fd, static_cast<size_t>(n));
+	ob.erase(0, static_cast<size_t>(n));// remove sent data
+	
+	if (ob.empty()) {
+		pollfds[i].events &= ~POLLOUT; // all sent, disable POLLOUT
+	}
 	return false;
 }
 
-void Server::pushLine(int fd, const std::string& msg) {
-    std::map<int, std::string>::iterator it = outbuff.find(fd);
-    if (it == outbuff.end()) return;
-    it->second.append(msg);
-    // ensure POLLOUT is set on this fd
-    for (size_t i = 1; i < pollfds.size(); ++i) {
+/**
+ * @brief Append a message (with CRLF) to the client's output buffer and enable POLLOUT.
+ */
+void Server::pushToClient(int fd, const std::string& msg) {
+    ClientMap::iterator it = client_lst.find(fd);
+    if (it == client_lst.end()) {
+		Log::warn("pushToClient: fd not found: " + std::to_string(fd));
+		return;
+	}
+	Client* cl = it->second;
+   	cl->sendMessage(msg);
+    // turn on POLLOUT change to fd_index
+    for (size_t i = 0; i < pollfds.size(); ++i) {
         if (pollfds[i].fd == fd) {
             pollfds[i].events |= POLLOUT;
             break;
@@ -374,24 +352,10 @@ void Server::pushLine(int fd, const std::string& msg) {
     }
 }
 
-
-//unfinished
-void Server::sendNumeric(int fd, const std::string& code, const std::string& p1, const std::string& msg) {
-    std::string line;
-    line.reserve(64 + code.size() + p1.size() + msg.size());
-    line += code;
-    if (!p1.empty()) { line += " "; line += p1; }
-    if (!msg.empty()) { line += " :"; line += msg; }
-    line += "\r\n";
-    pushLine(fd, line);
-}
-
-void Server::pushToChannel(Channel& ch, const std::string& line, int exceptFd) {
-    // Assumes Channel exposes: const std::vector<int>& members() const;
-    const std::vector<int>& mem = ch.members();
-    for (size_t i = 0; i < mem.size(); ++i) {
-        int mfd = mem[i];
-        if (mfd == exceptFd) continue;
-        pushLine(mfd, line);
-    }
+void Server::sendWelcome(Client* c) {
+    if (!c) return;
+    const std::string nick = c->getNickname().empty() ? "*" : c->getNickname();
+    c->sendMessage(":" SERVER_NAME " " RPL_WELCOME  " " + nick + " :Welcome to " SERVER_NAME ", " + nick);
+    c->sendMessage(":" SERVER_NAME " " RPL_YOURHOST " " + nick + " :Your host is " + c->getHostname() + ", running version v0.1 o itkol");
+    c->sendMessage(":" SERVER_NAME " " RPL_CREATED  " " + nick + " :This server was created just now");
 }
