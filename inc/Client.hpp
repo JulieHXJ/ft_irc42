@@ -1,42 +1,69 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   Client.hpp                                         :+:      :+:    :+:   */
+/*   ClientA.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/09/13 23:53:11 by junjun            #+#    #+#             */
-/*   Updated: 2025/09/14 00:14:04 by junjun           ###   ########.fr       */
+/*   Created: 2025/09/24 14:30:35 by gahmed            #+#    #+#             */
+/*   Updated: 2025/09/28 12:46:55 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef CLIENT_HPP
-#define CLIENT_HPP
+#pragma once
 
 #include <string>
-#include <unistd.h> // close
-#include <set>
+#include <vector>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
-class Client {
-private:
-	int fd;
-	bool registered; // whether the client has completed registration
-	std::string nick, user, realname, hostname;
-	std::string inbox, outbox; // buffers for incoming and outgoing data
-	std::set<std::string> channels; // channels the client has joined
-public:
-	Client(int socketFd): fd(socketFd) {}
-	~Client() { if (fd != -1) close(fd); }
-
-	int getFd() const { return fd; }
-	std::string& getInbox() { return inbox; }
-	std::string& getOutbox() { return outbox; }
-
-	void appendToInbox(const std::string& data) { inbox += data; }
-	void appendToOutbox(const std::string& data) { outbox += data; }
-
-	void clearInbox() { inbox.clear(); }
-	void clearOutbox() { outbox.clear(); }
+// IRC Message structure
+struct IRCMessage {
+    std::string prefix;
+    std::string command;
+    std::vector<std::string> parameters;
+    std::string trailing;
 };
 
-#endif // CLIENT_HPP
+class Client {
+    private:
+        int fd;                         // File descriptor
+        std::string nickname;           // User's nickname
+        std::string username;           // User's username
+        std::string realname;           // User's real name
+        std::string hostname;           // Client's hostname
+        bool authenticated;             // Password authentication status
+        bool registered;                // Full registration status
+        std::string inbuff;             // Incoming message buffer
+        std::string outbuff;            // outgoing message buffer
+        std::string joined;             // channels joined
+        
+    public:
+        // Constructor/Destructor
+        Client(int socket_fd);
+        ~Client();
+        
+        // Authentication methods
+        bool authenticate(const std::string& password);
+        void setNickname(const std::string& nick);
+        void setUsername(const std::string& user, const std::string& real);
+        void checkRegistrationComplete();
+
+        
+        // Message handling
+        void appendToBuffer(const std::string& data);
+        std::vector<std::string> extractMessages();
+        IRCMessage parseMessage(const std::string& raw);
+        void receiveOnce();
+        void detectHostname();
+        bool sendMessage(const std::string& message);
+        bool flushOutput();
+        
+        // Getters/Setters
+        int getFd() const;
+        std::string getNickname() const;
+        bool isAuthenticated() const;
+        bool isRegistered() const;
+};

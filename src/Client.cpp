@@ -10,7 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "./inc/ClientA.hpp"
+#include "./inc/Client.hpp"
 
 
 Client::Client(int socket_fd) 
