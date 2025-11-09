@@ -69,5 +69,7 @@
 		"type_traits": "cpp",
 		"utility": "cpp",
 		"unordered_set": "cpp"
-	}
+	},
+	"42header.email": "mmonika@student.42.fr",
+	"42header.username": "mmonika"
 }

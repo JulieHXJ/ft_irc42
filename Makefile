@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: junjun <junjun@student.42.fr>              +#+  +:+       +#+         #
+#    By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
-#    Created: Invalid date        by                   #+#    #+#              #
-#    Updated: 2025/11/01 01:07:41 by junjun           ###   ########.fr        #
+#    Created: 2025/09/08 15:49:16 by junjun            #+#    #+#              #
+#    Updated: 2025/11/09 13:28:25 by mmonika          ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/18 16:10:19 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/11/09 16:56:49 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -123,7 +123,7 @@ void Server::handlePart(Client* c, const std::vector<std::string>& params) {
         return;
     }
     // Broadcast PART message to channel members
-    ch->broadcastInChan(":" + c->getNickname() + " PART " + chan + " :" + reason, NULL);
+    ch->broadcast(":" + c->getNickname() + " PART " + chan + " :" + reason, NULL);
     c->sendMessage(":" + c->getNickname() + " PART " + chan + " :" + reason);
     Log::partEvt(c->getNickname(), chan, reason);
     // Remove member from channel
@@ -170,7 +170,7 @@ void Server::handleKick(Client* client, const std::vector<std::string>& params) 
     Channel* c = it->second;
     if (!c->isOperator(client->getNickname())) { client->sendMessage(":" SERVER_NAME " " ERR_CHANOPRIVSNEEDED " " + client->getNickname() + " " + chan + " :You're not channel operator"); return; }
     if (!c->isMember(target)) { client->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + client->getNickname() + " " + chan + " :You're not on that channel"); return; }
-    c->broadcastInChan(":" + client->getNickname() + " KICK " + chan + " " + target, NULL);
+    c->broadcast(":" + client->getNickname() + " KICK " + chan + " " + target, NULL);
     c->kickMember(client, target, reason);
     Log::kickEvt(client->getNickname(), chan, target, reason);
 }
@@ -223,7 +223,7 @@ void Server::handlePrivmsg(Client* client, const std::vector<std::string>& param
         if (it == channel_lst.end()) { client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHCHANNEL " " + nick + " " + target + " :No such channel"); return; }
         Channel* ch = it->second;
         if (!ch->isMember(nick)) { client->sendMessage(":" SERVER_NAME " " ERR_CANNOTSENDTOCHAN " " + nick + " " + target + " :Cannot send to channel"); return; }
-        ch->broadcastInChan(":" + nick + " PRIVMSG " + target + " :" + text, client);
+        ch->broadcast(":" + nick + " PRIVMSG " + target + " :" + text, client);
         return;
 
     }
@@ -246,7 +246,7 @@ void Server::handleQuit(Client* client, const std::vector<std::string>& params){
         ChannelMap::iterator next = it;
         ++next;
         if (ch && ch->isMember(nick)) {
-            ch->broadcastInChan(":" + nick + " QUIT :" + reason, NULL);
+            ch->broadcast(":" + nick + " QUIT :" + reason, NULL);
             ch->removeMember(nick);
             client->leaveChannel(ch->getName());
             // possibly delete empty channel
@@ -370,7 +370,7 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
         for (size_t i = 2; i < argIdx; ++i) {
             broadcast += " " + params[i];
         }
-        ch->broadcastInChan(broadcast, NULL);
+        ch->broadcast(broadcast, NULL);
         client->sendMessage(broadcast);
         return;
     }

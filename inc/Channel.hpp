@@ -3,17 +3,18 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/09/13 23:56:57 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/01 01:09:34 by junjun           ###   ########.fr       */
+/*   Created: 2025/09/13 23:56:57 by mmonika           #+#    #+#             */
+/*   Updated: 2025/11/09 21:06:40 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 #include "Global.hpp"
-
+#include "Logger.hpp"
 #include <string>
+#include <set>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -27,20 +28,21 @@ class Channel {
     	bool		inviteOnly;			// +i mode
     	bool		topicRestriction;	// +t mode
     	size_t		maxUserLimit;		// +l mode
-
+// if needed we will convert to std::map and std::set
     	std::unordered_map<std::string, Client*>	members;		// All channel members
-    	std::unordered_map<std::string, Client*>	operators;      // Channel operators only
+    	std::unordered_set<std::string>				operators;      // Channel operators only
 		std::unordered_set<std::string>				invitedUsers;	// For +i mode
 
 	public:
+// if needed will use explicit Channel
 		Channel(const std::string& name);
 		Channel(const Channel& other);
 		Channel& operator=(const Channel& other);
 		~Channel();
 
 		// Getters
-    	std::string getName() const;
-    	std::string getTopic() const;
+    	std::string getName() const; //const std::string& getName() const;
+    	std::string getTopic() const; //const std::string& getTopic() const;
     	int			getMemberCount() const;
     	bool		isFull() const;
     
@@ -51,11 +53,11 @@ class Channel {
     
     	// Operator management
     	bool isOperator(const std::string& nickname) const;
-    	void addOperator(const std::string& nickname);
-    	void removeOperator(const std::string& nickname);
+    	bool addOperator(const std::string& nickname);
+    	bool removeOperator(const std::string& nickname);
     
 	    // Invite management
-    	void inviteUser(const std::string& nickname);
+    	bool inviteUser(const std::string& nickname);
     	bool isInvited(const std::string& nickname) const;
     
     	// Message broadcasting
@@ -74,6 +76,6 @@ class Channel {
     
 		// Validation methods
     	bool canJoin(Client* client, const std::string& password);
-		void Channel::sendNamesList(Client* client) const;
-		// void setOperatorPrivilege(const std::string& nickname, bool isOperator);
+		void sendNamesList(Client* client) const;
+		void sendTopic(Client* client);
 };

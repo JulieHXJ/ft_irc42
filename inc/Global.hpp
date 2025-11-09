@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Global.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 16:43:33 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/16 13:17:13 by junjun           ###   ########.fr       */
+/*   Updated: 2025/11/09 17:52:18 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,9 +24,7 @@
 // ========================
 
 // ---- Basic Info ----
-#ifndef SERVER_NAME
-# define SERVER_NAME "ircserv"
-#endif
+#define SERVER_NAME "ircserver"
 
 #ifndef DEFAULT_PORT
 # define DEFAULT_PORT 6667

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/01 01:18:41 by junjun           ###   ########.fr       */
+/*   Updated: 2025/11/09 16:57:25 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -136,7 +136,7 @@ void Server::removeClientFromAllChannels(int fd) {
 	for (ChannelMap::iterator chIt = channel_lst.begin(); chIt != channel_lst.end();) {
 		Channel* channel = chIt->second;
 		if (channel && !nick.empty() && channel->isMember(nick)) {
-			channel->broadcast(":" + nick + " QUIT :Client disconnected", nullptr);
+			channel->broadcast(":" + nick + " QUIT :Client disconnected", nullptr); // need to check
 			channel->removeMember(nick);
 		}
 		//delete empty channel
