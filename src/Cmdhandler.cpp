@@ -27,8 +27,8 @@ void Server::handlePass(Client* c, const std::vector<std::string>& params) {
         return;
     }
     Log::info ("PASS ok fd=" + std::to_string(c->getFd()));
-    c->setPassOk(password);
-    c->setRegistered();
+    c->setPassOk(true);
+    c->checkRegistrationComplete();
     if (c->isRegistered()) {
         sendWelcome(c);
         Log::info("Client fd=" + std::to_string(c->getFd()) +
@@ -54,7 +54,7 @@ void Server::handleNick(Client* c, const std::vector<std::string>& params) {
         // for each channel: ch->broadcast(...) if needed
         c->sendMessage(":" + oldnick + " NICK :" + nick);
     }
-    c->setRegistered();
+    c->checkRegistrationComplete();
     if (c->isRegistered()) {
         sendWelcome(c);
         Log::info("Client fd=" + std::to_string(c->getFd()) +
@@ -73,7 +73,7 @@ void Server::handleUser(Client* c, const std::vector<std::string>& params) {
     const std::string username = params[0];
     c->setUsername(username);
     
-    c->setRegistered();
+    c->checkRegistrationComplete();
     if (c->isRegistered()) {
         sendWelcome(c);
         Log::info("Client fd=" + std::to_string(c->getFd()) +
@@ -398,7 +398,7 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
 
 void Server::handleCmd(Client* c, const std::string& line) {
     if (!c || line.empty()) return;
-    IRCmessage msg = parseLine(line);
+    IRCMessage msg = parseMessage(line);
     if (msg.command.empty()) return;
 
     if (msg.command == "PASS")  handlePass(c, msg.params);//PASS <password>

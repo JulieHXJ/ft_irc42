@@ -12,7 +12,7 @@
 
 #pragma once
 #include "Global.hpp"
-#include "Logger.hpp"
+#include "Log.hpp"
 #include <string>
 #include <set>
 #include <unordered_set>

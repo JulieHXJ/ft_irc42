@@ -126,7 +126,7 @@ reconnect:
             if (line.empty()) continue;
 
             std::cout << "[ircserv] " << line << "\n";
-            IRCmessage m = parseLine(line);
+            IRCMessage m = parseMessage(line);
 
             // PING → PONG
             if (m.command == "PING") {

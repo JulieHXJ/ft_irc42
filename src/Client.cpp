@@ -10,29 +10,37 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "./inc/Client.hpp"
+#include "../inc/Client.hpp"
 
+Client::Client(int socket_fd) : fd(socket_fd), nickname(""), username(""), hostname(""), authenticated(false),
+                                registered(false), inbuff(""), outbuff("") {}
 
-Client::Client(int socket_fd) 
-    : fd(socket_fd), authenticated(false), registered(false), inbuff(""), outbuff(""), joined("") {
-    // Initialize client with socket file descriptor
-}
-
-Client::~Client() {
-    if (fd != -1) {
-        close(fd);
+Client::Client(const Client& other) {*this = other;}
+Client& Client::operator=(const Client& other) {
+    if (this != &other) {
+        fd = other.fd;
+        nickname = other.nickname;
+        username = other.username;
+        hostname = other.hostname;
+        authenticated = other.authenticated;
+        registered = other.registered;
+        inbuff = other.inbuff;
+        outbuff = other.outbuff;
+        joinedChannels = other.joinedChannels;
     }
+    return *this;
 }
 
-bool Client::authenticate(const std::string& password) {
-    // Implement password authentication logic
+Client::~Client() { if (fd != -1) close(fd); }
+int Client::getFd() const { return fd; }
+std::string Client::getNickname() const { return nickname; }
+std::string Client::getHostname() const { return hostname; }
+bool Client::getAuthenticated() const { return authenticated; }
+bool Client::isRegistered() const { return registered; }
 
-
-
-    // This depends on your IRC server's authentication requirements
-    (void)password;
-    authenticated = true;
-    return authenticated;
+void Client::setPassOk(bool ok) { 
+    authenticated = ok;
+    checkRegistrationComplete();
 }
 
 void Client::setNickname(const std::string& nick) {
@@ -40,110 +48,14 @@ void Client::setNickname(const std::string& nick) {
     checkRegistrationComplete();
 }
 
-void Client::setUsername(const std::string& user, const std::string& real) {
+void Client::setUsername(const std::string& user) {
     username = user;
-    realname = real;
     checkRegistrationComplete();
 }
 
 void Client::checkRegistrationComplete() {
-    if (!nickname.empty() && !username.empty()) {
+    if (authenticated && !nickname.empty() && !username.empty()) {
         registered = true;
-    }
-}
-
-
-void Client::appendToBuffer(const std::string& data) {
-    inbuff += data;
-}
-
-std::vector<std::string> Client::extractMessages() {
-    std::vector<std::string> messages;
-    size_t pos = 0;
-    
-    // IRC messages are terminated with \r\n
-    while ((pos = inbuff.find("\r\n")) != std::string::npos) {
-        messages.push_back(inbuff.substr(0, pos));
-        inbuff.erase(0, pos + 2);
-    }
-    
-    return messages;
-}
-
-int Client::getFd() const {
-    return fd;
-}
-
-std::string Client::getNickname() const {
-    return nickname;
-}
-
-bool Client::isAuthenticated() const {
-    return authenticated;
-}
-
-bool Client::isRegistered() const {
-    return registered;
-}
-
-// receive message
-IRCMessage Client::parseMessage(const std::string& raw) {
-    IRCMessage msg;
-    std::string line = raw;
-    
-    // Parse prefix (starts with :)
-    if (!line.empty() && line[0] == ':') {
-        size_t space = line.find(' ');
-        if (space != std::string::npos) {
-            msg.prefix = line.substr(1, space - 1);
-            line = line.substr(space + 1);
-        }
-    }
-    
-    // Parse trailing (starts with :)
-    size_t trailing_pos = line.find(" :");
-    if (trailing_pos != std::string::npos) {
-        msg.trailing = line.substr(trailing_pos + 2);
-        line = line.substr(0, trailing_pos);
-    }
-    
-    // Parse command and parameters
-    std::istringstream iss(line);
-    std::string token;
-    bool first = true;
-    
-    while (iss >> token) {
-        if (first) {
-            msg.command = token;
-            first = false;
-        } else {
-            msg.parameters.push_back(token);
-        }
-    }
-    
-    return msg;
-}
-
-void Client::receiveOnce() {
-    char buffer[1024];
-    int bytes_received = recv(fd, buffer, sizeof(buffer) - 1, MSG_DONTWAIT);
-    
-    if (bytes_received > 0) {
-        buffer[bytes_received] = '\0';
-        appendToBuffer(std::string(buffer));
-        
-        std::vector<std::string> messages = extractMessages();
-        for (size_t i = 0; i < messages.size(); ++i) {
-            std::cout << "RECV: " << messages[i] << std::endl;
-        }
-    }
-    else if (bytes_received == 0) {
-        std::cout << "Connection closed by server" << std::endl;
-    }
-    else {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            std::cerr << "Receive error: " << strerror(errno) << std::endl;
-        }
     }
 }
 
@@ -158,19 +70,74 @@ void Client::detectHostname() {
     }
 }
 
+void Client::appendInbuff(const char* data, size_t n) {
+    if (n == 0 || !data) 
+        return; 
+    inbuff.append(data, n); 
+}
+
+bool Client::extractLine(std::string& line){
+    size_t nl = inbuff.find('\n');
+    if (nl == std::string::npos) {
+        size_t cr = inbuff.find('\r');
+        if (cr == std::string::npos) return false;          // no line yet
+        line.assign(inbuff, 0, cr);                          // up to CR
+        inbuff.erase(0, cr + 1);                            // drop CR
+    } else {
+        size_t end = (nl > 0 && inbuff[nl - 1] == '\r') ? nl - 1 : nl;
+        line.assign(inbuff, 0, end);                         // up to before CR/LF
+        inbuff.erase(0, nl + 1);                            // drop LF (and CR if present)
+    }
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+    line.erase(std::remove(line.begin(), line.end(), '\0'), line.end());
+    return true;
+}
+
 bool Client::sendMessage(const std::string& message) {
-    std::string msg = message + "\r\n";
-    outbuff += msg;
+    if (message.empty()) return true;
+    outbuff += message;
+    outbuff += CRLF;
     return flushOutput();
 }
 
+void Client::markForClose() { if (fd >= 0) { close(fd); fd = -1; } }
 bool Client::flushOutput() {
-    if (outbuff.empty()) return true;
-    
-    ssize_t sent = send(fd, outbuff.c_str(), outbuff.length(), MSG_DONTWAIT);
+    if (outbuff.empty() || fd < 0) return true;
+    ssize_t sent = send(fd, outbuff.c_str(), outbuff.size(), MSG_DONTWAIT);
     if (sent > 0) {
-        outbuff.erase(0, sent);
+        outbuff.erase(0, static_cast<size_t>(sent));
         return outbuff.empty();
     }
+    if (sent == 0) return false; // try again later
+    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+        return false;
+    std::perror("send");
+    markForClose();
     return false;
 }
+
+size_t Client::findChannelIndex(const std::string& channel) const {
+    for (size_t i = 0; i < joinedChannels.size(); ++i) {
+        if (joinedChannels[i] == channel) return i;
+    }
+    return static_cast<size_t>(-1); // npos
+}
+
+void Client::joinChannel(const std::string& channel) {
+    if (channel.empty()) return;
+    if (findChannelIndex(channel) == static_cast<size_t>(-1)) {
+        joinedChannels.push_back(channel); 
+    }
+}
+
+void Client::leaveChannel(const std::string& channel) {
+    if (channel.empty()) return;
+    size_t idx = findChannelIndex(channel);
+    if (idx != static_cast<size_t>(-1)) {
+        joinedChannels.erase(joinedChannels.begin() + idx);
+    }
+}
+
+bool Client::hasOutput() const { return !outbuff.empty(); }
+std::string& Client::getOutput() { return outbuff; }
+std::vector<std::string> Client::getChannels() const { return joinedChannels; }

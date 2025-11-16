@@ -13,14 +13,13 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
-#include "../inc/Global.hpp"
-#include "../inc/Client.hpp"
-#include "../inc/Channel.hpp"
+#include "Global.hpp"
+#include "Client.hpp"
+#include "Channel.hpp"
 #include <unistd.h> // close
 #include <sys/socket.h> // socket, bind, listen, accept, recv, send
 #include <netinet/in.h> // sockaddr_in
 #include <poll.h>
-
 #include <fcntl.h>
 #include <arpa/inet.h> // inet_ntop
 #include <cerrno>
@@ -29,6 +28,8 @@
 #include <sstream>          // std::ostringstream
 #include <csignal>
 
+class Channel;
+class Client;
 class Server {
 private:
 	int listenfd;                           // listening socket
