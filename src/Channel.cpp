@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by mmonika           #+#    #+#             */
-/*   Updated: 2025/11/09 21:09:01 by mmonika          ###   ########.fr       */
+/*   Updated: 2025/11/16 23:10:30 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,6 +41,7 @@ Channel::~Channel() {
 
 std::string Channel::getName() const { return name; }
 std::string Channel::getTopic() const { return topic; }
+size_t Channel::getUserLimit() const { return maxUserLimit; }
 int Channel::getMemberCount() const { return static_cast<int>(members.size()); }
 bool Channel::isFull() const { return (maxUserLimit > 0 && members.size() >= maxUserLimit); }
 
@@ -52,9 +53,9 @@ bool Channel::addMember(Client* client, const std::string& password) {
     if (members.size() == 1) operators.insert(client->getNickname());
     broadcast(":" + client->getNickname() + " JOIN " + name, nullptr);
     if (topic.empty())
-        client->sendMessage(":" + SERVER_NAME + " " + RPL_NOTOPIC + " " + client->getNickname() + " " + name + " :No topic is set");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + RPL_NOTOPIC + " " + client->getNickname() + " " + name + " :No topic is set");
     else
-        client->sendMessage(":" + SERVER_NAME + " " + RPL_TOPIC + " " + client->getNickname() + " " + name + " :" + topic);
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + RPL_TOPIC + " " + client->getNickname() + " " + name + " :" + topic);
     sendNamesList(client);
     return true;
 }
@@ -162,7 +163,7 @@ std::string Channel::getModesString() const {
 void Channel::setTopic(const std::string& newTopic, Client* client) {
     if (!client) return;
     if (!canChangeTopic(client->getNickname())) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_CHANOPRIVSNEEDED + " " + client->getNickname() + " " + name + " :You're not channel operator"); //need to check again
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_CHANOPRIVSNEEDED + " " + client->getNickname() + " " + name + " :You're not channel operator"); //need to check again
         return;
     }
     topic = newTopic;
@@ -177,11 +178,11 @@ bool Channel::canChangeTopic(const std::string& nickname) const {
 bool Channel::kickMember(Client* client, const std::string& targetNickname, const std::string& reason) {
     if (!client) return false;
     if (!isOperator(client->getNickname())) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_CHANOPRIVSNEEDED + " " + client->getNickname() + " " + name + " :You're not channel operator");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_CHANOPRIVSNEEDED + " " + client->getNickname() + " " + name + " :You're not channel operator");
         return false;
     }
     if (!isMember(targetNickname)) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_USERNOTINCHANNEL + " " + client->getNickname() + " " + targetNickname + " " + name + " :They aren't on that channel");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_USERNOTINCHANNEL + " " + client->getNickname() + " " + targetNickname + " " + name + " :They aren't on that channel");
         return false;
     }
     Client* targetClient = members[targetNickname];
@@ -197,19 +198,19 @@ bool Channel::kickMember(Client* client, const std::string& targetNickname, cons
 bool Channel::canJoin(Client* client, const std::string& password) {
     if (!client) return false;
     if (isMember(client->getNickname())) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_USERONCHANNEL + " " + client->getNickname() + "  " + name + " :Is already on channel");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_USERONCHANNEL + " " + client->getNickname() + "  " + name + " :Is already on channel");
         return false;
     }
     if (!passKey.empty() && passKey != password) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_BADCHANNELKEY + " " + client->getNickname() + " " + name + " :Cannot join channel (+k)");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_BADCHANNELKEY + " " + client->getNickname() + " " + name + " :Cannot join channel (+k)");
         return false;
     }
     if (inviteOnly && !isInvited(client->getNickname())) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_INVITEONLYCHAN + " " + client->getNickname() + " " + name + " :Cannot join channel (+i)");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_INVITEONLYCHAN + " " + client->getNickname() + " " + name + " :Cannot join channel (+i)");
         return false;
     }
     if (isFull()) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_CHANNELISFULL + " " + client->getNickname() + " " + name + " :Cannot join channel (+l)");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_CHANNELISFULL + " " + client->getNickname() + " " + name + " :Cannot join channel (+l)");
         return false;
     }
     return true;
@@ -223,7 +224,7 @@ void Channel::sendNamesList(Client* client) {
         const std::string& nick = entry.first;
         names.push_back(isOperator(nick) ? "@" + nick : nick);
     }
-    const std::string header = ":" + SERVER_NAME + " " + RPL_NAMREPLY + " " + client->getNickname() + " = " + name + " :";
+    const std::string header = std::string(":") + SERVER_NAME + " " + RPL_NAMREPLY + " " + client->getNickname() + " = " + name + " :";
     std::string line;
     for (size_t i = 0; i < names.size(); ++i) {
         const std::string& token = names[i];
@@ -236,17 +237,17 @@ void Channel::sendNamesList(Client* client) {
         }
     }
     client->sendMessage(line.empty() ? header : header + line);
-    client->sendMessage(":" + SERVER_NAME + " " + RPL_ENDOFNAMES + " " + client->getNickname() + " " + name + " :End of NAMES list");
+    client->sendMessage(std::string(":") + SERVER_NAME + " " + RPL_ENDOFNAMES + " " + client->getNickname() + " " + name + " :End of NAMES list");
 }
 
 void Channel::sendTopic(Client* client) {
     if (!client) return;
     if (!isMember(client->getNickname())) {
-        client->sendMessage(":" + SERVER_NAME + " " + ERR_NOTONCHANNEL + " " + client->getNickname() + " " + name + " :You're not on that channel");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + ERR_NOTONCHANNEL + " " + client->getNickname() + " " + name + " :You're not on that channel");
         return;
     }
     if (!topic.empty())
-        client->sendMessage(":" + SERVER_NAME + " " + RPL_TOPIC + " " + client->getNickname() + " " + name + " :" + topic);
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + RPL_TOPIC + " " + client->getNickname() + " " + name + " :" + topic);
     else
-        client->sendMessage(":" + SERVER_NAME + " " + RPL_NOTOPIC + " " + client->getNickname() + " " + name + " :No topic is set");
+        client->sendMessage(std::string(":") + SERVER_NAME + " " + RPL_NOTOPIC + " " + client->getNickname() + " " + name + " :No topic is set");
 }

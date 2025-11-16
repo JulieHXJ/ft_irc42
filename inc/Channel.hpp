@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by mmonika           #+#    #+#             */
-/*   Updated: 2025/11/09 21:06:40 by mmonika          ###   ########.fr       */
+/*   Updated: 2025/11/16 23:09:54 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -43,7 +43,8 @@ class Channel {
 		// Getters
     	std::string getName() const; //const std::string& getName() const;
     	std::string getTopic() const; //const std::string& getTopic() const;
-    	int			getMemberCount() const;
+    	size_t		getUserLimit() const;
+		int			getMemberCount() const;
     	bool		isFull() const;
     
 		// Member management
@@ -76,6 +77,6 @@ class Channel {
     
 		// Validation methods
     	bool canJoin(Client* client, const std::string& password);
-		void sendNamesList(Client* client) const;
+		void sendNamesList(Client* client);
 		void sendTopic(Client* client);
 };

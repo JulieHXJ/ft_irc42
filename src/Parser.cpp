@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: xhuang <xhuang@student.42.fr>              +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 01:00:39 by junjun            #+#    #+#             */
-/*   Updated: 2025/10/10 16:42:46 by xhuang           ###   ########.fr       */
+/*   Updated: 2025/11/16 23:11:09 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -53,10 +53,10 @@ IRCMessage parseMessage(const std::string& raw)
 		}
 		size_t nextSpace = s.find(' ', i);
 		if (nextSpace == std::string::npos) {
-			msg.parameters.push_back(s.substr(i));
+			msg.params.push_back(s.substr(i));
 			break;
 		} else {
-			msg.parameters.push_back(s.substr(i, nextSpace - i));
+			msg.params.push_back(s.substr(i, nextSpace - i));
 			i = nextSpace + 1;
 			while (i < n && s[i] == ' ') ++i;
 		}

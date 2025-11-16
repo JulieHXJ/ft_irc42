@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 00:53:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/01 01:19:16 by junjun           ###   ########.fr       */
+/*   Updated: 2025/11/16 23:04:10 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,7 +35,7 @@ struct IRCMessage
 {
     std::string prefix;     // server or nick!user@host or empty
     std::string command;    // NICK, USER, JOIN, etc.
-    std::vector<std::string> parameters;    // Command parameters and trailing
+    std::vector<std::string> params;    // Command parameters and trailing
     std::string trailing;   // Trailing (after " :")
 };
 
