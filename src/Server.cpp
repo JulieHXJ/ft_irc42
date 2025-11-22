@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mmonika <mmonika@student.42.fr>            +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/09 16:57:25 by mmonika          ###   ########.fr       */
+/*   Updated: 2025/11/22 17:48:25 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -41,7 +41,19 @@ Server::~Server(){
 	for (ClientMap::iterator it = client_lst.begin(); it != client_lst.end(); ++it) {
 		delete it->second;
 	}
+
+	// ClientMap::iterator it = client_lst.begin();
+	// while (it != client_lst.end()) {
+	// 	if (it->second->getFd() < 0) {
+	// 		delete it->second;
+	// 		it = client_lst.erase(it);
+	// 	} else {
+	// 		++it;
+	// 	}
+	// }
+	
 	client_lst.clear();//why at last?
+
 }
 
 Server& Server::operator=(const Server& rhs){
@@ -236,30 +248,30 @@ void Server::run(){
  * @brief Accept new incoming connections on the listening socket. 
  * Print welcone message and the client info.
  */
-void Server::acceptNewConnect(){
-    if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;//no new connection
 
-    for(;;){
+void Server::acceptNewConnect() {
+    if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;
+
+    for (;;) {
         sockaddr_in clientAddr; socklen_t clientLen = sizeof(clientAddr);
         int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
         if (connfd < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             if (errno == EINTR) continue;
-            perror("accept"); 
-			break;
+            perror("accept");
+            break;
         }
-		setNonBlocking(connfd);
+
+        linger lg; lg.l_onoff = 1; lg.l_linger = 0;
+        setsockopt(connfd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
+
+        setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN | POLLOUT);
-		
-		Client* newClient = new Client(connfd);
-		newClient->detectHostname();
-		client_lst[connfd] = newClient;
+        Client* newClient = new Client(connfd);
+        newClient->detectHostname();
+        client_lst[connfd] = newClient;
         newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
-		
-        // enable write for the newly added (it's at the back)
-        pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
-		
-		//put in server log
+        pollfds.back().events |= POLLOUT;
         Log::newConnect(connfd, clientAddr);
     }
 }
