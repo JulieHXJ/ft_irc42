@@ -254,7 +254,7 @@ void Server::acceptNewConnect(){
 		Client* newClient = new Client(connfd);
 		newClient->detectHostname();
 		client_lst[connfd] = newClient;
-        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
+        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER <nickname> u 0 * :username to complete registeration");
 		
         // enable write for the newly added (it's at the back)
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
