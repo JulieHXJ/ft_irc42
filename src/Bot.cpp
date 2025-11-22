@@ -46,7 +46,9 @@ static void sendln(int fd, const std::string& s) {
 
 static int toInt(const std::string& s, int defv) {
     char* end = 0; long v = std::strtol(s.c_str(), &end, 10);
-    if (!end || *end) return defv; return (int)v;
+    if (!end || *end)
+        return defv;
+    return (int)v;
 }
 static int dice(int n) {
     if (n < 1) n = 6;

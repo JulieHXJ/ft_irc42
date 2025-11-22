@@ -126,7 +126,7 @@ nc -C 127.0.0.1 6667
 ```
 PASS <password>
 NICK <nickname>
-USER <username> 0 * :<realname>
+USER <nickname> u 0 * :<username>
 ```
 
 → When all three complete successfully → client is **registered**.
