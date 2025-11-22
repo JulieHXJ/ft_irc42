@@ -100,7 +100,13 @@ bool Client::sendMessage(const std::string& message) {
     return flushOutput();
 }
 
-void Client::markForClose() { if (fd >= 0) { close(fd); fd = -1; } }
+void Client::markForClose() { 
+    if (fd >= 0) {
+        close(fd);
+        fd = -1;
+    }
+}
+
 bool Client::flushOutput() {
     if (outbuff.empty() || fd < 0) return true;
     ssize_t sent = send(fd, outbuff.c_str(), outbuff.size(), MSG_DONTWAIT);

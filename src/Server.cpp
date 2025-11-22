@@ -6,7 +6,7 @@
 /*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/22 17:48:25 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/22 17:58:26 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -267,11 +267,16 @@ void Server::acceptNewConnect() {
 
         setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN | POLLOUT);
-        Client* newClient = new Client(connfd);
-        newClient->detectHostname();
-        client_lst[connfd] = newClient;
-        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
-        pollfds.back().events |= POLLOUT;
+		
+		Client* newClient = new Client(connfd);
+		newClient->detectHostname();
+		client_lst[connfd] = newClient;
+        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER <nickname> u 0 * :username to complete registeration");
+		
+        // enable write for the newly added (it's at the back)
+        pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
+		
+		//put in server log
         Log::newConnect(connfd, clientAddr);
     }
 }
