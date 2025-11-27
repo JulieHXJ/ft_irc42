@@ -23,7 +23,8 @@ void Server::handlePass(Client* c, const std::vector<std::string>& params) {
     
     if (!password.empty() && params[0] != password) {
         c->sendMessage(":" SERVER_NAME " " ERR_PASSWDMISMATCH " * :Password incorrect");
-        c->markForClose();// shutdown the client (optional but usual)
+        Log::warn("[PASS] incorrect!");
+        // c->markForClose();// shutdown the client
         return;
     }
     Log::info ("PASS ok fd=" + std::to_string(c->getFd()));

@@ -42,17 +42,7 @@ Server::~Server(){
 		delete it->second;
 	}
 
-	// ClientMap::iterator it = client_lst.begin();
-	// while (it != client_lst.end()) {
-	// 	if (it->second->getFd() < 0) {
-	// 		delete it->second;
-	// 		it = client_lst.erase(it);
-	// 	} else {
-	// 		++it;
-	// 	}
-	// }
-	
-	client_lst.clear();//why at last?
+	client_lst.clear();
 
 }
 
@@ -83,11 +73,6 @@ void Server::setNonBlocking(int fd){
     if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
         throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ") + std::strerror(errno));
 	}
-	// #ifdef __APPLE__
-	// int set = 1;
-	// setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
-	// #endif
-
 }
 
 /**
@@ -262,8 +247,9 @@ void Server::acceptNewConnect() {
             break;
         }
 
-        linger lg; lg.l_onoff = 1; lg.l_linger = 0;
-        setsockopt(connfd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
+		// deleted the abortion to let the client keep trying password
+        // linger lg; lg.l_onoff = 1; lg.l_linger = 0;
+        // setsockopt(connfd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
 
         setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN | POLLOUT);
