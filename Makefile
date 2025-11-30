@@ -28,7 +28,8 @@ BOT_BIN		= ircbot
 BOT_SRC		= src/Bot.cpp src/Parser.cpp
 BOT_OBJ		= $(BOT_SRC:%.cpp=$(OBJ_DIR)/%.o)
 
-all: $(NAME) 
+all: $(NAME) $(BOT_BIN)
+
 bonus: $(BOT_BIN)
 
 $(NAME): $(OBJ)
