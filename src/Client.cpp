@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42.fr>              +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/24 14:30:35 by gahmed            #+#    #+#             */
-/*   Updated: 2025/09/28 13:08:56 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 17:14:32 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,22 +14,6 @@
 
 Client::Client(int socket_fd) : fd(socket_fd), nickname(""), username(""), hostname(""), authenticated(false),
                                 registered(false), inbuff(""), outbuff("") {}
-
-Client::Client(const Client& other) {*this = other;}
-Client& Client::operator=(const Client& other) {
-    if (this != &other) {
-        fd = other.fd;
-        nickname = other.nickname;
-        username = other.username;
-        hostname = other.hostname;
-        authenticated = other.authenticated;
-        registered = other.registered;
-        inbuff = other.inbuff;
-        outbuff = other.outbuff;
-        joinedChannels = other.joinedChannels;
-    }
-    return *this;
-}
 
 Client::~Client() { if (fd != -1) close(fd); }
 int Client::getFd() const { return fd; }

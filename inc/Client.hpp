@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   ClientA.hpp                                        :+:      :+:    :+:   */
+/*   Client.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42.fr>              +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/24 14:30:35 by gahmed            #+#    #+#             */
-/*   Updated: 2025/09/28 12:46:55 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 15:10:01 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,8 +38,6 @@ class Client {
     public:
         // Constructor/Destructor
         Client(int socket_fd);
-        Client(const Client& other);
-        Client& operator=(const Client& other);
         ~Client();
         
         //Getters
@@ -51,16 +49,12 @@ class Client {
 
         // Authentication methods
         void setPassOk(bool ok);
-        // bool authenticate(const std::string& password);
         void setNickname(const std::string& nick);
         void setUsername(const std::string& user);
         void checkRegistrationComplete();
         void detectHostname();
         
         // Message handling
-        // void appendToBuffer(const std::string& data);
-        // std::vector<std::string> extractMessages();
-        // void receiveOnce();
         void appendInbuff(const char* data, size_t n);
         bool extractLine(std::string& line);
         bool sendMessage(const std::string& message);

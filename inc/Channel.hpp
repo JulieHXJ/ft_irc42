@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by mmonika           #+#    #+#             */
-/*   Updated: 2025/11/16 23:09:54 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 15:10:13 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,16 +28,12 @@ class Channel {
     	bool		inviteOnly;			// +i mode
     	bool		topicRestriction;	// +t mode
     	size_t		maxUserLimit;		// +l mode
-// if needed we will convert to std::map and std::set
     	std::unordered_map<std::string, Client*>	members;		// All channel members
     	std::unordered_set<std::string>				operators;      // Channel operators only
 		std::unordered_set<std::string>				invitedUsers;	// For +i mode
 
 	public:
-// if needed will use explicit Channel
 		Channel(const std::string& name);
-		Channel(const Channel& other);
-		Channel& operator=(const Channel& other);
 		~Channel();
 
 		// Getters

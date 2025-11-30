@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Parser.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/09 01:00:39 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/16 23:11:09 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 14:13:02 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -49,6 +49,7 @@ IRCMessage parseMessage(const std::string& raw)
 	while (i < n) {
 		if (s[i] == ':') {
 			msg.trailing = s.substr(i + 1);
+			msg.params.push_back(msg.trailing);
 			break;
 		}
 		size_t nextSpace = s.find(' ', i);

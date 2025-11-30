@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Channel.cpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 23:56:57 by mmonika           #+#    #+#             */
-/*   Updated: 2025/11/16 23:10:30 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 14:54:20 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,28 +17,11 @@
 #include <vector>
 
 Channel::Channel(const std::string& name) : name(name), topic(), passKey(), inviteOnly(false), topicRestriction(false), maxUserLimit(0) {}
-Channel::Channel(const Channel& other) {*this = other;}
-Channel& Channel::operator=(const Channel& other) {
-    if (this != &other) {
-        name = other.name;
-        topic = other.topic;
-        passKey = other.passKey;
-        inviteOnly = other.inviteOnly;
-        topicRestriction = other.topicRestriction;
-        maxUserLimit = other.maxUserLimit;
-        members = other.members;
-        operators = other.operators;
-        invitedUsers = other.invitedUsers;
-    }
-    return *this;
-}
-
 Channel::~Channel() {
     members.clear();
     operators.clear();
     invitedUsers.clear();
 }
-
 std::string Channel::getName() const { return name; }
 std::string Channel::getTopic() const { return topic; }
 size_t Channel::getUserLimit() const { return maxUserLimit; }

@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/11/16 23:02:41 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 17:28:38 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -123,19 +123,14 @@ void Server::handlePart(Client* c, const std::vector<std::string>& params) {
         c->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + c->getNickname() + " " + chan + " :You're not on that channel");
         return;
     }
-    // Broadcast PART message to channel members
     ch->broadcast(":" + c->getNickname() + " PART " + chan + " :" + reason, NULL);
-    c->sendMessage(":" + c->getNickname() + " PART " + chan + " :" + reason);
     Log::partEvt(c->getNickname(), chan, reason);
-    // Remove member from channel
     ch->removeMember(c->getNickname());
     c->leaveChannel(chan);
-    // delete empty channel
     if (ch->getMemberCount() == 0) {
         channel_lst.erase(it); 
         delete ch; 
     }
-    Log::partEvt(c->getNickname(), chan, reason);
 }
 
 //TOPIC #tea :Tea time at 5pm\r\n
@@ -153,7 +148,6 @@ void Server::handleTopic(Client* client, const std::vector<std::string>& params)
     } else {
         c->setTopic(params[1], client); 
     }
-    Log::topicEvt(client->getNickname(), chan, params.size() > 1 ? params[1] : "");
 }
 
 //KICK #tea bob :spamming\r\n
@@ -171,9 +165,7 @@ void Server::handleKick(Client* client, const std::vector<std::string>& params) 
     Channel* c = it->second;
     if (!c->isOperator(client->getNickname())) { client->sendMessage(":" SERVER_NAME " " ERR_CHANOPRIVSNEEDED " " + client->getNickname() + " " + chan + " :You're not channel operator"); return; }
     if (!c->isMember(target)) { client->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + client->getNickname() + " " + chan + " :You're not on that channel"); return; }
-    c->broadcast(":" + client->getNickname() + " KICK " + chan + " " + target, NULL);
     c->kickMember(client, target, reason);
-    Log::kickEvt(client->getNickname(), chan, target, reason);
 }
 
 //INVITE bob #tea\r\n
@@ -365,14 +357,11 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
                     break;
             }
         }
-
-        // broadcast
-        std::string broadcast = ":" + client->getNickname() + " MODE " + target + " " + modes;
+        std::string modeMsg = ":" + client->getNickname() + " MODE " + target + " " + modes;
         for (size_t i = 2; i < argIdx; ++i) {
-            broadcast += " " + params[i];
+            modeMsg += " " + params[i];
         }
-        ch->broadcast(broadcast, NULL);
-        client->sendMessage(broadcast);
+        ch->broadcast(modeMsg, NULL);
         return;
     }
 
@@ -401,7 +390,7 @@ void Server::handleCmd(Client* c, const std::string& line) {
     if (!c || line.empty()) return;
     IRCMessage msg = parseMessage(line);
     if (msg.command.empty()) return;
-
+    
     if (msg.command == "PASS")  handlePass(c, msg.params);//PASS <password>
     else if (msg.command == "NICK") handleNick(c, msg.params);
     else if (msg.command == "USER") handleUser(c, msg.params);

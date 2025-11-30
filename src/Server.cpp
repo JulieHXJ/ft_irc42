@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
+/*   By: mmonika <mmonika@student.42heilbronn.de    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/09/13 20:06:12 by junjun            #+#    #+#             */
-/*   Updated: 2025/11/22 17:58:26 by gahmed           ###   ########.fr       */
+/*   Updated: 2025/11/30 17:10:38 by mmonika          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -68,9 +68,7 @@ Server& Server::operator=(const Server& rhs){
 
 //helpers
 void Server::setNonBlocking(int fd){
-	int flags = ::fcntl(fd, F_GETFL, 0);
-    if (flags == -1) flags = 0;
-    if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    if (::fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
         throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ") + std::strerror(errno));
 	}
 }
@@ -235,41 +233,26 @@ void Server::run(){
  */
 
 void Server::acceptNewConnect() {
-    if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;
-
-    for (;;) {
-        sockaddr_in clientAddr; socklen_t clientLen = sizeof(clientAddr);
-        int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
-        if (connfd < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-            if (errno == EINTR) continue;
-            perror("accept");
-            break;
-        }
-
-		// deleted the abortion to let the client keep trying password
-        // linger lg; lg.l_onoff = 1; lg.l_linger = 0;
-        // setsockopt(connfd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
-
-        setNonBlocking(connfd);
-        addPollFd(pollfds, connfd, POLLIN | POLLOUT);
-		
-		Client* newClient = new Client(connfd);
-		newClient->detectHostname();
-		client_lst[connfd] = newClient;
-        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER <nickname> u 0 * :username to complete registeration");
-		
-        // enable write for the newly added (it's at the back)
-        pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
-		
-		//put in server log
-        Log::newConnect(connfd, clientAddr);
+	if (pollfds.empty() || !(pollfds[0].revents & POLLIN)) return;
+	sockaddr_in clientAddr; socklen_t clientLen = sizeof(clientAddr);
+	int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
+	if (connfd < 0) {
+        perror("accept");
+        return;
     }
+	setNonBlocking(connfd);
+    addPollFd(pollfds, connfd, POLLIN | POLLOUT);	
+	Client* newClient = new Client(connfd);
+	newClient->detectHostname();
+	client_lst[connfd] = newClient;
+	newClient->sendMessage(":" SERVER_NAME " NOTICE * :*** Looking up your hostname...");
+    pollfds[ pollfds.size() - 1 ].events |= POLLOUT;	
+    Log::newConnect(connfd, clientAddr);
 }
 
 /**
- * @brief keep receiving and appending until EAGAIN,
- * then extract lines, process command, generate responses
+ * @brief Receive data from client, extract lines, process commands, generate responses.
+ * Called only when poll() indicates POLLIN.
  */
 bool Server::handleClientRead(size_t i){
 	int fd = pollfds[i].fd;
@@ -284,7 +267,6 @@ bool Server::handleClientRead(size_t i){
 		cleanupIndex(i);
 		return true;
 	} else if (r < 0) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK) return false; // no data available
 		std::perror("recv");
 		cleanupIndex(i);
 		return true;
@@ -322,9 +304,9 @@ bool Server::handleWritable(size_t i){
 	
 	ssize_t n = ::send(fd, ob.data(), ob.size(), 0);
 	if (n < 0){
-		if (errno == EAGAIN || errno == EWOULDBLOCK) return false;
-        cleanupIndex(i);
-        return true;
+		std::perror("send");
+		cleanupIndex(i);
+		return true;
 	}
 	Log::sendBytes(fd, static_cast<size_t>(n));
 	ob.erase(0, static_cast<size_t>(n));// remove sent data
