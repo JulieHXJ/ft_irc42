@@ -41,7 +41,7 @@ Server::~Server(){
 	for (ClientMap::iterator it = client_lst.begin(); it != client_lst.end(); ++it) {
 		delete it->second;
 	}
-	client_lst.clear();//why at last?
+	client_lst.clear();
 }
 
 Server& Server::operator=(const Server& rhs){
@@ -66,15 +66,9 @@ Server& Server::operator=(const Server& rhs){
 
 //helpers
 void Server::setNonBlocking(int fd){
-	int flags = ::fcntl(fd, F_GETFL, 0);
-    if (flags == -1) flags = 0;
-    if (::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+	if (::fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
         throw std::runtime_error(std::string("fcntl(O_NONBLOCK): ") + std::strerror(errno));
 	}
-	// #ifdef __APPLE__
-	// int set = 1;
-	// setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
-	// #endif
 
 }
 
@@ -136,7 +130,7 @@ void Server::removeClientFromAllChannels(int fd) {
 	for (ChannelMap::iterator chIt = channel_lst.begin(); chIt != channel_lst.end();) {
 		Channel* channel = chIt->second;
 		if (channel && !nick.empty() && channel->isMember(nick)) {
-			channel->broadcastInChan(":" + nick + " QUIT :Client disconnected", 0);
+			channel->broadcast(":" + nick + " QUIT :Client disconnected", 0);
 			channel->removeMember(nick);
 		}
 		//delete empty channel
@@ -243,23 +237,18 @@ void Server::acceptNewConnect(){
         sockaddr_in clientAddr; socklen_t clientLen = sizeof(clientAddr);
         int connfd = ::accept(listenfd, (sockaddr*)&clientAddr, &clientLen);
         if (connfd < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-            if (errno == EINTR) continue;
-            perror("accept"); 
+            // if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            // if (errno == EINTR) continue;
+            std::perror("accept"); 
 			break;
         }
 		setNonBlocking(connfd);
         addPollFd(pollfds, connfd, POLLIN | POLLOUT);
-		
 		Client* newClient = new Client(connfd);
 		newClient->detectHostname();
 		client_lst[connfd] = newClient;
-        newClient->sendMessage(": NOTICE * :*** Enter your PASS, NICK, and USER u 0 * :real to complete registeration");
-		
-        // enable write for the newly added (it's at the back)
+       	newClient->sendMessage(":" SERVER_NAME " NOTICE * :*** Looking up your hostname...");
         pollfds[ pollfds.size() - 1 ].events |= POLLOUT;
-		
-		//put in server log
         Log::newConnect(connfd, clientAddr);
     }
 }
@@ -292,7 +281,7 @@ bool Server::handleClientRead(size_t i){
 	// 2) pop a complete line from client inbuff and handle commands
 	std::string line;
 	while (cl->extractLine(line)) {
-		Log::dbg("fd=" + std::to_string(fd) + " CMD: [" + line + "]");//for debug
+		// Log::dbg("fd=" + std::to_string(fd) + " CMD: [" + line + "]");//for debug
 		handleCmd(cl, line);
 	}
 

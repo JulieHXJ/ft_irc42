@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Cmdhandler.cpp                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: junjun <junjun@student.42.fr>              +#+  +:+       +#+        */
+/*   By: gahmed <gahmed@student.42heilbronn.de>     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/10/07 16:54:06 by xhuang            #+#    #+#             */
-/*   Updated: 2025/10/17 17:23:45 by junjun           ###   ########.fr       */
+/*   Updated: 2025/11/16 23:02:41 by gahmed           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,12 +23,12 @@ void Server::handlePass(Client* c, const std::vector<std::string>& params) {
     
     if (!password.empty() && params[0] != password) {
         c->sendMessage(":" SERVER_NAME " " ERR_PASSWDMISMATCH " * :Password incorrect");
-        c->markForClose();// shutdown the client (optional but usual)
+        Log::warn("[PASS] incorrect!");
         return;
     }
     Log::info ("PASS ok fd=" + std::to_string(c->getFd()));
-    c->setPassOk(password);
-    c->setRegistered();
+    c->setPassOk(true);
+    c->checkRegistrationComplete();
     if (c->isRegistered()) {
         sendWelcome(c);
         Log::info("Client fd=" + std::to_string(c->getFd()) +
@@ -54,7 +54,7 @@ void Server::handleNick(Client* c, const std::vector<std::string>& params) {
         // for each channel: ch->broadcast(...) if needed
         c->sendMessage(":" + oldnick + " NICK :" + nick);
     }
-    c->setRegistered();
+    c->checkRegistrationComplete();
     if (c->isRegistered()) {
         sendWelcome(c);
         Log::info("Client fd=" + std::to_string(c->getFd()) +
@@ -73,7 +73,7 @@ void Server::handleUser(Client* c, const std::vector<std::string>& params) {
     const std::string username = params[0];
     c->setUsername(username);
     
-    c->setRegistered();
+    c->checkRegistrationComplete();
     if (c->isRegistered()) {
         sendWelcome(c);
         Log::info("Client fd=" + std::to_string(c->getFd()) +
@@ -105,6 +105,7 @@ void Server::handleJoin(Client* c, const std::vector<std::string>& params) {
 }
 
 //PART #tea :gotta run\r\n
+//todo: check the operator and assign to next one
 void Server::handlePart(Client* c, const std::vector<std::string>& params) {
     if (!c) return;
     if (!c->isRegistered()) { c->sendMessage(":" SERVER_NAME " " ERR_NOTREGISTERED " * :You have not registered"); return; }
@@ -122,14 +123,13 @@ void Server::handlePart(Client* c, const std::vector<std::string>& params) {
         c->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + c->getNickname() + " " + chan + " :You're not on that channel");
         return;
     }
-    // Broadcast PART message to channel members
-    ch->broadcastInChan(":" + c->getNickname() + " PART " + chan + " :" + reason, NULL);
-    c->sendMessage(":" + c->getNickname() + " PART " + chan + " :" + reason);
-    Log::partEvt(c->getNickname(), chan, reason);
-    // Remove member from channel
+    ch->broadcast(":" + c->getNickname() + " PART " + chan + " :" + reason, NULL);
+    // c->sendMessage(":" + c->getNickname() + " PART " + chan + " :" + reason);
+    // Log::partEvt(c->getNickname(), chan, reason);
     ch->removeMember(c->getNickname());
     c->leaveChannel(chan);
-    // delete empty channel
+    //assign new operator 
+
     if (ch->getMemberCount() == 0) {
         channel_lst.erase(it); 
         delete ch; 
@@ -138,9 +138,13 @@ void Server::handlePart(Client* c, const std::vector<std::string>& params) {
 }
 
 //TOPIC #tea :Tea time at 5pm\r\n
+//todo: check the user privilege when setting topic
 void Server::handleTopic(Client* client, const std::vector<std::string>& params) {
     if (!client) return;
     if (!client->isRegistered()) { client->sendMessage(":" SERVER_NAME " " ERR_NOTREGISTERED " * :You have not registered"); return; }
+    
+    // if the client is not the operator, send ERR_CHANOPRIVSNEEDED
+
     if (params.size() < 1) { client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " TOPIC :Not enough parameters"); return; }
     std::string chan = params[0];
     
@@ -170,7 +174,6 @@ void Server::handleKick(Client* client, const std::vector<std::string>& params) 
     Channel* c = it->second;
     if (!c->isOperator(client->getNickname())) { client->sendMessage(":" SERVER_NAME " " ERR_CHANOPRIVSNEEDED " " + client->getNickname() + " " + chan + " :You're not channel operator"); return; }
     if (!c->isMember(target)) { client->sendMessage(":" SERVER_NAME " " ERR_NOTONCHANNEL " " + client->getNickname() + " " + chan + " :You're not on that channel"); return; }
-    c->broadcastInChan(":" + client->getNickname() + " KICK " + chan + " " + target, NULL);
     c->kickMember(client, target, reason);
     Log::kickEvt(client->getNickname(), chan, target, reason);
 }
@@ -211,7 +214,9 @@ void Server::handleInvite(Client* client, const std::vector<std::string>& params
 void Server::handlePrivmsg(Client* client, const std::vector<std::string>& params) {
     if (!client) return;
     if (!client->isRegistered()) { client->sendMessage(":" SERVER_NAME " " ERR_NOTREGISTERED " * :You have not registered"); return; }
-    if (params.size() < 2) { client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " PRIVMSG :Not enough parameters"); return; }
+    if (params.size() < 2) { 
+        
+        client->sendMessage(":" SERVER_NAME " " ERR_NEEDMOREPARAMS " " + client->getNickname() + " PRIVMSG :Not enough parameters"); return; }
 
     const std::string target = params[0];
     const std::string text   = params[1];
@@ -223,7 +228,7 @@ void Server::handlePrivmsg(Client* client, const std::vector<std::string>& param
         if (it == channel_lst.end()) { client->sendMessage(":" SERVER_NAME " " ERR_NOSUCHCHANNEL " " + nick + " " + target + " :No such channel"); return; }
         Channel* ch = it->second;
         if (!ch->isMember(nick)) { client->sendMessage(":" SERVER_NAME " " ERR_CANNOTSENDTOCHAN " " + nick + " " + target + " :Cannot send to channel"); return; }
-        ch->broadcastInChan(":" + nick + " PRIVMSG " + target + " :" + text, client);
+        ch->broadcast(":" + nick + " PRIVMSG " + target + " :" + text, client);
         return;
 
     }
@@ -246,10 +251,10 @@ void Server::handleQuit(Client* client, const std::vector<std::string>& params){
         ChannelMap::iterator next = it;
         ++next;
         if (ch && ch->isMember(nick)) {
-            ch->broadcastInChan(":" + nick + " QUIT :" + reason, NULL);
+            ch->broadcast(":" + nick + " QUIT :" + reason, NULL);
             ch->removeMember(nick);
             client->leaveChannel(ch->getName());
-            // possibly delete empty channel
+            //delete empty channel
             if (ch->getMemberCount() == 0) {
                 channel_lst.erase(it);
                 delete ch;
@@ -321,7 +326,7 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
             switch (m) {
                 case 'i': // invite-only
                 case 't': // topic-restriction
-                    ch->setMode(m, set, "");
+                    ch->setMode('t', set, "");
                     break;
 
                 case 'k': // passkey
@@ -345,8 +350,10 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
                         }
                         param = params[argIdx++];
                         ch->setMode('l', true, param);
+                        Log::info("Set user limit for channel " + target + " to " + param);
                     } else {
                         ch->setMode('l', false, "");
+                        Log::info("Removed user limit for channel " + target + " from " + param);
                     }
                     break;
 
@@ -370,7 +377,7 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
         for (size_t i = 2; i < argIdx; ++i) {
             broadcast += " " + params[i];
         }
-        ch->broadcastInChan(broadcast, NULL);
+        ch->broadcast(broadcast, NULL);
         client->sendMessage(broadcast);
         return;
     }
@@ -398,7 +405,7 @@ void Server::handleMode(Client* client, const std::vector<std::string>& params) 
 
 void Server::handleCmd(Client* c, const std::string& line) {
     if (!c || line.empty()) return;
-    IRCmessage msg = parseLine(line);
+    IRCmessage msg = parseMessage(line);
     if (msg.command.empty()) return;
 
     if (msg.command == "PASS")  handlePass(c, msg.params);//PASS <password>
@@ -420,7 +427,7 @@ void Server::handleCmd(Client* c, const std::string& line) {
 } 
 
 
-//LIST #keyword (for searching channles with keyword)
+//LIST #keyword (for searching channles with keyword): channel name, usernb, topic
 void Server::handleList(Client* c, const std::vector<std::string>& params) {
     if (!c || !c->isRegistered()) return;
     std::string pattern;
@@ -440,7 +447,7 @@ void Server::handleList(Client* c, const std::vector<std::string>& params) {
 void Server::handleNames(Client* c, const std::vector<std::string>& params) {
 	if (!c || !c->isRegistered()) return;
 	if (params.empty()) {
-		// List names for all channels
+		// List names for all channels : channel, nicknames
 		for (ChannelMap::iterator it = channel_lst.begin(); it != channel_lst.end(); ++it) {
 			Channel* ch = it->second;
 			ch->sendNamesList(c);
@@ -462,7 +469,7 @@ void Server::handleNames(Client* c, const std::vector<std::string>& params) {
 	}
 }
 
-// ADMIN
+// INFO
 void Server::handleInfo(Client* c) {
     if (!c) return;
     c->sendMessage(":" SERVER_NAME " 256 " + c->getNickname() + " :Administrative info");

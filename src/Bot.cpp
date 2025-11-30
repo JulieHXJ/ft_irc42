@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     int         port = (argc > 2) ? std::atoi(argv[2]) : 6667;
     std::string pass = (argc > 3) ? argv[3] : "mypass";
     std::string nick = (argc > 4) ? argv[4] : "ircbot";
-    // std::string user = (argc > 5) ? argv[5] : "ircbot";
+
 
 reconnect:
     if (g_stop) return 0;
@@ -126,7 +126,7 @@ reconnect:
             if (line.empty()) continue;
 
             std::cout << "[ircserv] " << line << "\n";
-            IRCmessage m = parseLine(line);
+            IRCmessage m = parseMessage(line);
 
             // PING → PONG
             if (m.command == "PING") {

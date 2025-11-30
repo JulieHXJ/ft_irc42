@@ -30,13 +30,14 @@ PRIVMSG bob :hi bob\r\n
 MODE #tea +i\r\n
 QUIT :Client exiting\r\n
  */
-struct IRCmessage {
-    std::string prefix;  // server or nick!user@host or empty
-    std::string command;             // NICK, USER, JOIN, etc.
-    std::vector<std::string> params; // Command parameters and trailing
+struct IRCmessage
+{
+    std::string prefix;     // server or nick!user@host or empty
+    std::string command;    // NICK, USER, JOIN, etc.
+    std::vector<std::string> params;    // Command parameters and trailing
+    std::string trailing;   // Trailing (after " :")
 };
 
-
-IRCmessage parseLine(const std::string &rawLine);
+IRCmessage parseMessage(const std::string& raw);
 
 #endif

@@ -168,16 +168,16 @@ USER <username> 0 * :<realname>
 make
 ```
 
-### **Run**
+### **Keep the server running and run this in another terminal**
 
 ```bash
-./ircbot <host> <port> <password> [nickname]
+./ircbot <host> <port> <password> 
 ```
 
 **Example:**
 
 ```bash
-./ircbot 127.0.0.1 6667 mypass ircbot
+./ircbot 127.0.0.1 6667 mypass 
 ```
 
 ---

@@ -10,78 +10,71 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#ifndef CHANNEL_HPP
-#define CHANNEL_HPP
-
-#include "../inc/Global.hpp"
-#include "../inc/Log.hpp"
+#pragma once
+#include "Global.hpp"
+#include "Log.hpp"
+#include <string>
 #include <set>
+#include <unordered_set>
+#include <unordered_map>
 
-class Client; // forward-declare to avoid circular includes
+
+class Client;
 
 class Channel {
 private:
-	std::string chan_name;
-	std::string chan_topic;
-	std::string chan_passkey; // +k mode 
-	bool 		inviteOnly; // +i mode 
-	bool 		topicRestriction; // +t mode 
-	size_t 		maxUserLimit; // +l (0 => unlimited)
-
-	std::map<std::string, Client*> 	members; // nickname of all channel members
-	std::map<std::string, Client*> 	operators; // channel operators
-	std::set<std::string> 			invitedUsers; // for +i mode
+	std::string	name;
+    	std::string	topic;
+    	std::string	passKey;			// +k mode
+    	bool		inviteOnly;			// +i mode
+    	bool		topicRestriction;	// +t mode
+    	size_t		maxUserLimit;		// +l mode
+    	std::unordered_map<std::string, Client*>	members;		// All channel members
+    	std::unordered_set<std::string>				operators;      // Channel operators only
+		std::unordered_set<std::string>				invitedUsers;	// For +i mode
 
 public:
-	explicit Channel(const std::string& name);
-	Channel(const Channel& other); 
-	Channel& operator=(const Channel& other); 
+	Channel(const std::string& name);
 	~Channel();
 
-	//getters
-	const std::string& getName() const { return chan_name; }
-	const std::string& getTopic() const { return chan_topic; }
-	const std::string getPasskey() const { return chan_passkey; }
-	size_t getUserLimit() const { return maxUserLimit; }
-	bool isTopicRestriction() const { return topicRestriction; }
-	int getMemberCount() const { return static_cast<int>(members.size()); }
-	
-	bool isFull() const { return (maxUserLimit > 0 && members.size() >= maxUserLimit); }
-	bool isMember(const std::string& nickname) const  {return members.find(nickname) != members.end();}
-	bool isOperator(const std::string& nickname) const { return operators.find(nickname) != operators.end(); }
-	bool isInvited(const std::string& nickname) const { return invitedUsers.find(nickname) != invitedUsers.end(); }
-
-	std::string getModesString() const;
-
-	
-	//setters
-	void setPasskey(const std::string& key) { chan_passkey = key; }
-	void setInviteOnly(bool set) { inviteOnly = set; }
-	void setTopicRestriction(bool set) { topicRestriction = set; }
-	void setUserLimit(size_t limit) { maxUserLimit = limit; }
-	void setTopic(const std::string& newTopic, Client* setter);
-	void setMode(char mode, bool set, const std::string& param);	
-	
-	
-	//management
-	bool addMember(Client* client, const std::string& password);
-	void removeMember(const std::string& nickname);
-    bool kickMember(Client* requester, const std::string& targetNick, const std::string& reason);
-    bool addOperator(const std::string& nickname);
-    bool removeOperator(const std::string& nickname);
-	bool inviteUser(const std::string& nickname);
-	
-	
-	//broadcast
-	void broadcastInChan(const std::string& msg, Client* exclude);
-	
-	void sendNamesList(Client* to);
-	void sendTopic(Client* to);
-	
-	//authorization check
-	bool canChangeTopic(const std::string& nickname) const;
-	bool canJoin(Client* client, const std::string& password);
-	
+	// Getters
+    	std::string getName() const; //const std::string& getName() const;
+    	std::string getTopic() const; //const std::string& getTopic() const;
+    	size_t		getUserLimit() const;
+		int			getMemberCount() const;
+    	bool		isFull() const;
+    
+		// Member management
+    	bool addMember(Client* client, const std::string& password);
+    	void removeMember(const std::string& nickname);
+    	bool isMember(const std::string& nickname) const;
+    
+    	// Operator management
+    	bool isOperator(const std::string& nickname) const;
+    	bool addOperator(const std::string& nickname);
+    	bool removeOperator(const std::string& nickname);
+    
+	    // Invite management
+    	bool inviteUser(const std::string& nickname);
+    	bool isInvited(const std::string& nickname) const;
+    
+    	// Message broadcasting
+		void broadcast(const std::string &msg, Client* exclude);
+    
+	    // Mode management
+    	void setMode(char mode, bool set, const std::string& param);
+    	std::string getModesString() const;
+    
+    	// Topic management
+    	void setTopic(const std::string& newTopic, Client* client);
+    	bool canChangeTopic(const std::string& nickname) const;
+		
+		//Kick command
+		bool kickMember(Client* client, const std::string& targetNickname, const std::string& reason);
+    
+		// Validation methods
+    	bool canJoin(Client* client, const std::string& password);
+		void sendNamesList(Client* client);
+		void sendTopic(Client* client);
 
 };
-#endif // CHANNEL_HPP

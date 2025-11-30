@@ -14,7 +14,9 @@ NAME        = ircserv
 
 CXX         = c++
 
-CXXFLAGS    = -Wall -Wextra -Werror -std=c++98
+CXXFLAGS    = -Wall -Wextra -Werror -std=c++17
+
+VALGRIND	= valgrind --leak-check=full --track-origins=yes
 
 SRCS		= src/main.cpp src/Server.cpp src/Client.cpp src/Cmdhandler.cpp \
 			  src/Channel.cpp src/Parser.cpp 
@@ -29,21 +31,30 @@ BOT_OBJS    = $(BOT_SRCS:.cpp=.o)
 all: $(NAME) $(BOT_BIN)
 
 $(NAME): $(OBJS)
-		$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+	@echo "\033[34m🔄 Loading....\033[0m"
+	@$(CXX) $(CXXFLAGS) -o $(NAME) $(OBJS)
+	@echo "\033[32m🚀 Program is ready to execute\033[0m"
 
 $(BOT_BIN): $(BOT_OBJS)
-	$(CXX) $(CXXFLAGS) $(BOT_OBJS) -o $(BOT_BIN)
+	@echo "\033[34m🔄 Loading IRCBOT....\033[0m"
+	@$(CXX) $(CXXFLAGS) $(BOT_OBJS) -o $(BOT_BIN)
+	@echo "\033[32m🚀 IRCBOT is ready\033[0m"
 
 %.o:	 %.cpp
 		$(CXX) $(CXXFLAGS) -Iinc -c $< -o $@
 	
 clean:
-	rm -f $(OBJS) $(BOT_OBJS)
+	@rm -f $(OBJS) $(BOT_OBJS)
+	@echo "\033[31mObject files removed\033[0m"
 	
 fclean:		clean
-	rm -f $(NAME) $(BOT_BIN)
+	@rm -f $(NAME) $(BOT_BIN)
+	@echo "\033[31mProgram removed\033[0m"
 
 re:		fclean 
 		@$(MAKE) all
 
-.PHONY: all clean fclean re
+valgrind: $(NAME)
+	$(VAL) ./$(NAME)
+
+.PHONY: all clean fclean re valgrind bonus
